@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, type Text } from 'pixi.js';
-import { CARGO, COLORS, HEIGHT, HUD_H, HUD_SCALE, ITEMS, RENDER_SCALE, ROOM_H, ROOM_W, TEXT, TREASURE, WIDTH, type BeamMod, type ItemKind, type TreasureKind } from '../config';
+import { COLORS, HEIGHT, HUD_H, HUD_SCALE, ITEMS, RENDER_SCALE, ROOM_H, ROOM_W, TEXT, TREASURE, WIDTH, type BeamMod, type ItemKind, type TreasureKind } from '../config';
 import type { Clock } from '../engine/clock';
 import type { Device } from '../engine/input';
 import { label, setText as set, zone } from '../engine/text';
@@ -51,6 +51,8 @@ const TIERS = Object.keys(TREASURE) as TreasureKind[];
 const ROW_H = 20;
 /** The hold's slots, under the CARGO line; tier rows below them. */
 const SLOTS_Y = PANEL.y + 30, ROWS_Y = PANEL.y + 44;
+/** Room for the slot pips: ten at full width. */
+const SLOTS_W = 160;
 /** What the beam has, in a row under the tiers. */
 const GEAR: ItemKind[] = ['overcharge', 'splitter', 'lance', 'ricochet', 'shield'];
 /** Pause on touch: two bars between the score and SHIPS, with a thumb-sized tap zone. */
@@ -236,13 +238,13 @@ export class Hud {
       const full = s.cargo.length >= s.slots;
       set(this.cargoLabel, full ? 'HOLD FULL' : 'CARGO', full ? TEXT.danger : TEXT.dim);
       set(this.cargoTotal, s.cargo.length ? pts(total) : 'EMPTY');
-      // Filled, open and not-yet-unlocked slots.
+      // Filled and open slots, narrower as the hold grows so they always fit the panel.
       const g = this.slotPips.clear();
-      for (let i = 0; i < CARGO.max; i++) {
-        const x = PANEL.x + i * 16;
-        if (i < s.cargo.length) g.rect(x, SLOTS_Y, 14, 8).fill(COLORS.loot);
-        else if (i < s.slots) g.rect(x + 1, SLOTS_Y + 1, 12, 6).stroke({ width: 2, color: COLORS.amber, alpha: 0.6 });
-        else g.rect(x + 5, SLOTS_Y + 3, 4, 2).fill(COLORS.line);
+      const step = Math.min(16, Math.floor(SLOTS_W / s.slots)), w = step - 2;
+      for (let i = 0; i < s.slots; i++) {
+        const x = PANEL.x + i * step;
+        if (i < s.cargo.length) g.rect(x, SLOTS_Y, w, 8).fill(COLORS.loot);
+        else g.rect(x + 1, SLOTS_Y + 1, w - 2, 6).stroke({ width: 2, color: COLORS.amber, alpha: 0.6 });
       }
       for (const kind of TIERS) {
         const n = s.cargo.filter((k) => k === kind).length;

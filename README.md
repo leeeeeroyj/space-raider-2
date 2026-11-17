@@ -27,7 +27,7 @@ Space Raider is an original arcade game inspired by the mechanics of Taito's ear
 
 - **A new vault every run.** Each vault is a randomly generated maze with extra loops. The exit is always the room farthest from the entrance, and a floor arrow in each room points toward it.
 - **Twin-stick shooting with a continuous beam.** Move with one stick and aim with the other, in any direction.
-- **A 3D look from flat pixel art.** Every hostile, treasure and crate is a stack of slices baked from its 16 × 16 sprite, so saucers spin, sentries turn to face you and coins flip. The walls are drawn in code.
+- **A 3D look from flat pixel art.** Every hostile, treasure and crate is a stack of slices baked from its 16 × 16 sprite, so saucers spin, sentries turn to face you and coins flip. The walls are chunky voxel blocks drawn in code.
 - **Items.** Crates hold beam upgrades, a shield and cargo pods that let you carry more.
 - **Neon effects.** The floor grid warps around explosions, kills burst into sparks, and bright things glow. Big hits bend the lens and swing the colours.
 - **Sound and music with no audio files.** Every sound effect is generated in code when the game loads, and the music is a small tracker that follows the fight: drums and an arpeggio come in when hostiles show up.
@@ -38,7 +38,7 @@ Space Raider is an original arcade game inspired by the mechanics of Taito's ear
 Fly from room to room through the doorways. The **vault map** shows which rooms still hold loot, which still have hostiles, and which you've cleared.
 
 - **Treasure only scores once you bank it.** Pick it up, carry it to the **extraction pad**, and land on it to cash in. The pad takes you to the next, harder vault.
-- **Your hold takes 4 treasures.** When it's full, treasure stays on the floor until you bank or find a cargo pod.
+- **Your hold starts with 4 slots.** When it's full, treasure stays on the floor. While the vault still has more treasure than you can carry, clearing a room with a full hold drops a cargo pod, and so does walking into a quiet room with treasure in it, so you can always take everything.
 - **Crates glow cyan or magenta** (never gold, which is treasure), with what's inside floating over them. There are 2 or 3 in each vault, often guarded by a warden, and every brood pod leaves one.
 - **Losing a ship costs an Overcharge level and your newest mod.** Cargo pods are kept.
 - **When you lose a ship, your cargo drops where you died.** The room is marked with an ✕ on the map. You respawn at the vault entrance and can go back for it.
@@ -48,11 +48,11 @@ Fly from room to room through the doorways. The **vault map** shows which rooms 
 
 | Treasure | Value |
 | --- | ---: |
-| Scrap Coin | 500 |
-| Data Core | 1,000 |
-| Star Shard | 2,000 |
-| Relic Crystal | 4,000 |
-| Ancient Idol | 8,000 |
+| Scrap Coin | 1,500 |
+| Data Core | 3,000 |
+| Star Shard | 6,000 |
+| Relic Crystal | 12,000 |
+| Ancient Idol | 24,000 |
 
 | Item | What it does |
 | --- | --- |
@@ -61,7 +61,7 @@ Fly from room to room through the doorways. The **vault map** shows which rooms 
 | Lance | The beam goes through hostiles and hurts every one on its line. |
 | Ricochet | The beam bounces once off a wall. |
 | Shield | Takes one hit for you. |
-| Cargo pod | Two more slots in your hold, up to 10. |
+| Cargo pod | Two more slots in your hold. |
 
 | Hostile | Points | Behaviour |
 | --- | ---: | --- |

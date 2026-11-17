@@ -110,15 +110,13 @@ export const STACK = {
   shadow: { player: 6, hunter: 6, sentry: 6, mine: 5, brood: 7, warden: 7, scavenger: 5, loot: 4 } as Record<string, number>,
 };
 
-/** Wall colours (src/render/walls.ts). */
+/** Room colours (src/render/walls.ts): voxel stone, brass door frames, and the floor plates. */
 export const WALL = {
-  top: 0x262c4a,
-  frameTop: 0x30293a,
-  faceTop: 0x232946,
-  faceBottom: 0x0b0e1c,
-  edge: 0x7f8bc4,
-  seam: 0x0a0c18,
-  trim: 0x46d8ff,
+  stone: [0x2b3048, 0x30364f, 0x282c42, 0x343a55],
+  frame: [0x4a3a28, 0x564230],
+  floor: [0x131628, 0x1b1f36] as [number, number],
+  floorSeam: 0x0b0d18,
+  rivet: 0x262b46,
 };
 
 /** Spark colours when each kind blows up or takes damage. */
@@ -151,13 +149,13 @@ export const HUNTER = {
 export const SCORING = { explorerBonus: 10000, extraShipEvery: 10000 };
 export const BEAM = { damagePerSecond: 5, hitRadius: 7 };
 
-/** The hold: how many treasures you can carry. A cargo pod adds `perPod` slots, up to `max`. Pods are kept when you die. */
+/**
+ * The hold: how many treasures you can carry. A cargo pod adds `perPod` slots and is kept when you die. There's no
+ * cap: while the vault has more treasure than your hold, a full hold gets a pod when the room is clear.
+ */
 export const CARGO = {
   start: 4,
   perPod: 2,
-  max: 10,
-  /** Once the hold is full, a cargo pod turns up within this many rooms (not the exit room). */
-  podWithinRooms: [1, 3] as [number, number],
   /** While the hold is full, a crate is this many times likelier to hold a pod. */
   fullPodBoost: 4,
 };
@@ -198,11 +196,11 @@ export const SCAVENGER = { points: 50, speed: 52, fleeSpeed: 95, shooHp: 0.4, ch
 
 export type TreasureKind = 't1_coin' | 't2_chip' | 't3_star' | 't4_crystal' | 't5_idol';
 export const TREASURE: Record<TreasureKind, { name: string; value: number }> = {
-  t1_coin: { name: 'Scrap Coin', value: 500 },
-  t2_chip: { name: 'Data Core', value: 1000 },
-  t3_star: { name: 'Star Shard', value: 2000 },
-  t4_crystal: { name: 'Relic Crystal', value: 4000 },
-  t5_idol: { name: 'Ancient Idol', value: 8000 },
+  t1_coin: { name: 'Scrap Coin', value: 1500 },
+  t2_chip: { name: 'Data Core', value: 3000 },
+  t3_star: { name: 'Star Shard', value: 6000 },
+  t4_crystal: { name: 'Relic Crystal', value: 12000 },
+  t5_idol: { name: 'Ancient Idol', value: 24000 },
 };
 
 /** Sprite slots exported by tools/sprites.py to assets/sprites/<slot>.png. */

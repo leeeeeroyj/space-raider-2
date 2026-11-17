@@ -17,8 +17,7 @@ import { boltTexture, CENTER, doorTiles, entryPoint, inDoor, insideInterior, isE
 import { Pilot } from '../room/pilot';
 import { Stack } from '../render/stack';
 import { itemColor, itemIcon } from '../render/icons';
-import { buildWalls, drawWallShade } from '../render/walls';
-import { ROOM_STYLE, STYLES } from '../render/roomStyles';
+import { buildFloor, buildWalls, drawWallShade } from '../render/walls';
 import { duckMusic, pauseMusic, playMusic, setMood, stopMusic } from '../audio/music';
 import { loopSound, playSound, toggleMusic, toggleMute, type Loop } from '../sfx';
 import { touchSticks } from '../touch';
@@ -107,7 +106,7 @@ export class RoomScreen implements Screen {
   private readonly roomTop = new Container();
   /** Everything that stands up (walls, the ship, hostiles, loot, the pad, bolts), drawn back to front by floor y. */
   private readonly actors = new Container();
-  private wallPieces: Container[] = [];
+  private wallPieces: Graphics[] = [];
   private readonly sparkleLayer = new Container();
   readonly banner: Text;
   readonly subBanner: Text;
@@ -141,8 +140,6 @@ export class RoomScreen implements Screen {
   mods: BeamMod[] = [];
   shielded = false;
   private holdFullAt = -1e9;
-  /** Rooms to go before a cargo pod turns up, counting down while the hold is full. */
-  roomsToPod: number | undefined;
   private snap8 = AIM_MODE_SELECTABLE && aimMode.snap8;
   dead = false;
   over = false;
@@ -180,7 +177,7 @@ export class RoomScreen implements Screen {
       o.zIndex = z;
       return this.world.addChild(o);
     };
-    at(STYLES[ROOM_STYLE]?.floor() ?? this.drawFloor(), Z.floor);
+    at(buildFloor(), Z.floor);
     at(this.fx.floor, Z.grid);
     at(this.roomFloor, Z.floorFx);
     this.actors.sortableChildren = true;
@@ -455,8 +452,9 @@ export class RoomScreen implements Screen {
     if (room !== this.vault.exit) this.addSignpost(room);
     if (from) playSound('door');
     for (const loot of room.loot) this.placeTreasure(loot);
-    this.duePod(room);
     for (const crate of room.crates) this.placeCrate(crate);
+    // Walking into a quiet room with treasure you can't carry: the pod is waiting there.
+    if (room.loot.length && !hostileCount(room)) this.podIfFull();
     if (room === this.vault.exit) {
       const view = new Stack('exit');
       view.position.set(CENTER.x, CENTER.y);
@@ -501,20 +499,6 @@ export class RoomScreen implements Screen {
     if (side && next) this.enterRoom(next, OPPOSITE[side]);
   }
 
-  private drawFloor() {
-    const g = new Graphics();
-    const shades = [0x121528, 0x14182d, 0x111324];
-    for (let r = 1; r < ROWS - 1; r++) {
-      for (let c = 1; c < COLS - 1; c++) {
-        const x = c * TILE, y = HUD_H + r * TILE;
-        g.rect(x, y, TILE, TILE).fill(shades[(((c * 73856093) ^ (r * 19349663)) >>> 0) % 3]);
-        g.rect(x, y + TILE - 1, TILE, 1).rect(x + TILE - 1, y, 1, TILE).fill(0x0c0e1c);
-        g.rect(x + 1, y + 1, 1, 1).rect(x + TILE - 3, y + TILE - 3, 1, 1).fill(0x1d2240);
-      }
-    }
-    return g;
-  }
-
   private buildWalls(room: Room) {
     this.walls = Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => isWall(room, c, r)));
     const glow = new Graphics();
@@ -532,11 +516,8 @@ export class RoomScreen implements Screen {
         }
       }
     }
-    const style = STYLES[ROOM_STYLE];
-    if (!style || style.shade) this.roomFloor.addChild(drawWallShade());
-    if (!style || style.doorGlow) this.roomFloor.addChild(glow);
-    else glow.destroy();
-    this.wallPieces = style ? style.walls(room) : buildWalls(room);
+    this.roomFloor.addChild(drawWallShade(), glow);
+    this.wallPieces = buildWalls(room);
     this.actors.addChild(...this.wallPieces);
     this.clock.tween(glow, { alpha: 0.4 }, { ms: 900, yoyo: true, repeat: -1 });
   }
@@ -656,26 +637,32 @@ export class RoomScreen implements Screen {
     this.treasures.push({ loot, x: loot.x, y: loot.y, r: 5, view });
   }
 
+  /** Is there more treasure in the vault (on the floor anywhere, or in your hold) than your hold takes? */
+  private podNeeded() {
+    return this.slots < this.cargo.length + this.vault.rooms.reduce((n, r) => n + r.loot.length, 0);
+  }
+
   /**
-   * Keeps a full hold from going on too long: a few rooms after it fills, the room you walk into has a cargo pod.
-   * Banking or dropping your cargo calls it off.
+   * A full hold that can't take all the vault's treasure gets a cargo pod once the room is clear, so you can always
+   * carry everything: dropped where the last hostile died, or somewhere open in a room you walk into.
    */
-  private duePod(room: Room) {
-    if (this.cargo.length < this.slots || this.slots >= CARGO.max) this.roomsToPod = undefined;
-    if (this.roomsToPod === undefined || room === this.vault.exit) return;
-    if (--this.roomsToPod > 0) return;
-    this.roomsToPod = undefined;
-    if (room.crates.some((c) => c.item === 'pod')) return;
-    const unopened = room.crates.find((c) => c.item === undefined);
-    if (unopened) {
-      unopened.item = 'pod';
-      return;
+  private podIfFull(x?: number, y?: number) {
+    if (this.dead || this.cargo.length < this.slots || !this.podNeeded()) return;
+    if (this.room.crates.some((c) => c.item === 'pod')) return;
+    if (x === undefined || y === undefined) {
+      const spots = [];
+      for (let r = 3; r <= ROWS - 4; r++) for (let c = 3; c <= COLS - 4; c++) if (Math.abs(c - 10) > 1 || Math.abs(r - 6) > 1) spots.push(tileCenter(c, r));
+      const free = spots.filter((p) => ![...this.room.loot, ...this.room.crates].some((o) => dist(o.x, o.y, p.x, p.y) < 14) && dist(this.player.x, this.player.y, p.x, p.y) > 24);
+      ({ x, y } = rand.pick(free.length ? free : spots));
     }
-    // Somewhere open, away from the doors and the middle.
-    const spots = [];
-    for (let r = 3; r <= ROWS - 4; r++) for (let c = 3; c <= COLS - 4; c++) if (Math.abs(c - 10) > 1 || Math.abs(r - 6) > 1) spots.push(tileCenter(c, r));
-    const free = spots.filter((p) => ![...room.loot, ...room.foes, ...room.crates].some((o) => dist(o.x, o.y, p.x, p.y) < 14));
-    room.crates.push({ ...rand.pick(free.length ? free : spots), item: 'pod' });
+    this.dropCrate(x, y, 'pod');
+    this.floatText(x, y - 20, 'CARGO POD', TEXT.ink);
+  }
+
+  private dropCrate(x: number, y: number, item?: ItemKind) {
+    const crate: Crate = { x: clamp(x, INTERIOR.x0 + 8, INTERIOR.x1 - 8), y: clamp(y, INTERIOR.y0 + 8, INTERIOR.y1 - 8), item };
+    this.room.crates.push(crate);
+    this.placeCrate(crate);
   }
 
   /** What a crate holds: something you can still use, decided when you first see it. */
@@ -686,7 +673,7 @@ export class RoomScreen implements Screen {
       lance: !this.mods.includes('lance'),
       ricochet: !this.mods.includes('ricochet'),
       shield: !this.shielded,
-      pod: this.slots < CARGO.max,
+      pod: this.podNeeded(),
     };
     const options = (Object.keys(ITEMS.weights) as ItemKind[]).filter((k) => usable[k]);
     if (!options.length) return 'shield';
@@ -731,7 +718,7 @@ export class RoomScreen implements Screen {
         this.overcharge = Math.min(ITEMS.overcharge.max, this.overcharge + 1);
         return `OVERCHARGE ${this.overcharge}`;
       case 'pod':
-        this.slots = Math.min(CARGO.max, this.slots + CARGO.perPod);
+        this.slots += CARGO.perPod;
         return `CARGO POD  ${this.slots} SLOTS`;
       case 'shield':
         this.shielded = true;
@@ -757,10 +744,6 @@ export class RoomScreen implements Screen {
     this.room.loot.splice(this.room.loot.indexOf(loot), 1);
     this.treasures.splice(this.treasures.indexOf(t), 1);
     this.cargo.push(loot.kind);
-    // A full hold starts the countdown to a cargo pod.
-    if (this.cargo.length >= this.slots && this.slots < CARGO.max && this.roomsToPod === undefined) {
-      this.roomsToPod = rand.between(...CARGO.podWithinRooms);
-    }
     this.floatText(t.x, t.y - 8, `+${TREASURE[loot.kind].name.toUpperCase()}`, TEXT.amber);
     this.fx.pop(t.x, t.y - STACK.mid, [COLORS.loot, COLORS.amber], 24);
     playSound('pickup', { detune: Object.keys(TREASURE).indexOf(loot.kind) * 200 });
@@ -1016,12 +999,9 @@ export class RoomScreen implements Screen {
     else if (!e.brood) this.room.hunters -= 1;
     this.addScore(ENEMY_POINTS[kind]);
     // A brood pod always leaves a crate.
-    if (kind === 'brood') {
-      const crate: Crate = { x: clamp(e.x, INTERIOR.x0 + 8, INTERIOR.x1 - 8), y: clamp(e.y, INTERIOR.y0 + 8, INTERIOR.y1 - 8) };
-      this.room.crates.push(crate);
-      this.placeCrate(crate);
-    }
+    if (kind === 'brood') this.dropCrate(e.x, e.y);
     if (!hostileCount(this.room) && !e.brood) {
+      this.podIfFull(e.x, e.y);
       this.floatText(ROOM_W / 2, HUD_H + 30, 'ROOM SECURE', TEXT.beam);
       this.clock.delay(180, () => playSound('chime'));
     }

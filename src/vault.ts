@@ -61,7 +61,7 @@ export function mapCell(room: Room): MapCell {
 
 // Treasure tiers get rarer as they get more valuable.
 const TIER_ODDS: Array<[TreasureKind, number]> = [['t1_coin', 0.4], ['t2_chip', 0.28], ['t3_star', 0.18], ['t4_crystal', 0.1], ['t5_idol', 0.04]];
-const LOOT_COUNT_ODDS = [0.2, 0.4, 0.3, 0.1]; // chance of 0, 1, 2, 3 treasures in a room
+const LOOT_COUNT_ODDS = [0.65, 0.3, 0.05]; // chance of 0, 1, 2 treasures in a room: about 16 in a vault
 /** Chance a room gets each foe on vault 1; `perLevel` is added for each later vault. */
 const FOE_ODDS = { sentry: 0.22, mine: 0.35, warden: 0.45, brood: 0.1, perLevel: 0.05 };
 const CORNERS = [tileCenter(1, 1), tileCenter(COLS - 2, 1), tileCenter(1, ROWS - 2), tileCenter(COLS - 2, ROWS - 2)];

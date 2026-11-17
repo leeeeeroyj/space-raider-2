@@ -3,89 +3,74 @@ import { COLORS, COLS, HUD_H, ROOM_W, ROWS, STACK, TILE, WALL } from '../config'
 import { besideDoor, inDoor, isEdge, isWall } from '../room/geometry';
 import type { Room } from '../vault';
 
-/** Mixes two colours, t = 0..1. */
+/**
+ * The room, drawn in code as voxels: each wall tile is 2 × 2 blocks, each a little taller or shorter than the wall,
+ * so the walls look built from the same chunky slices as the hostiles. Door frames are brass with amber lights.
+ */
+
+const VOXEL = TILE / 2;
+const hash = (c: number, r: number) => ((((c * 73856093) ^ (r * 19349663)) >>> 0) % 997);
+
 function mix(a: number, b: number, t: number) {
   const ch = (s: number) => Math.round(((a >> s) & 255) * (1 - t) + ((b >> s) & 255) * t);
   return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
-const hash = (c: number, r: number) => (((c * 73856093) ^ (r * 19349663)) >>> 0) % 97;
-
-/**
- * Draws one wall tile as a block: its top face raised `height` above the tile, and its front face (only if nothing
- * stands in front of it) filling the gap down to the floor. Drawn in design pixels; the world's scale makes the half
- * pixel lines crisp on screen.
- */
-function drawBlock(g: Graphics, room: Room, c: number, r: number) {
-  const height = r === ROWS - 1 ? STACK.nearWall : STACK.wall;
-  const x = c * TILE, y = HUD_H + r * TILE - height;
-  const frame = besideDoor(room, c, r);
-  const piece = (dc: number, dr: number) => isWall(room, c + dc, r + dr);
-  const inside = (dc: number, dr: number) => {
-    const cc = c + dc, rr = r + dr;
-    return cc >= 0 && cc < COLS && rr >= 0 && rr < ROWS && !piece(dc, dr);
-  };
-
-  // Top face: plating, with a slightly lighter inset panel.
-  g.rect(x, y, TILE, TILE).fill(frame ? WALL.frameTop : WALL.top);
-  g.rect(x + 2, y + 2, TILE - 4, TILE - 4).fill(mix(frame ? WALL.frameTop : WALL.top, 0xffffff, 0.05));
-  if (!frame && hash(c, r) % 3 === 0) {
-    // A vent.
-    for (let i = 0; i < 3; i++) g.rect(x + 5, y + 5 + i * 2, 6, 0.5).fill(WALL.seam);
-  }
-  if (frame) {
-    // Hazard stripes along the face toward the doorway.
-    const toward = [[-1, 0], [1, 0], [0, -1], [0, 1]].find(([dc, dr]) => inDoor(room, c + dc, r + dr))!;
-    const vertical = toward[0] !== 0;
-    for (let i = 0; i < 4; i++) {
-      const o = i * 4;
-      if (vertical) g.rect(toward[0] > 0 ? x + TILE - 3 : x, y + o, 3, 2).fill(COLORS.amber);
-      else g.rect(x + o, toward[1] > 0 ? y + TILE - 3 : y, 2, 3).fill(COLORS.amber);
+/** The floor inside the walls: 8 px plates in slightly different shades, with dark seams and the odd rivet. */
+export function buildFloor() {
+  const g = new Graphics();
+  const x0 = TILE, x1 = ROOM_W - TILE, y0 = HUD_H + TILE, y1 = HUD_H + (ROWS - 1) * TILE;
+  for (let y = y0; y < y1; y += VOXEL) {
+    for (let x = x0; x < x1; x += VOXEL) {
+      const h = hash(x, y);
+      g.rect(x, y, VOXEL, VOXEL).fill(mix(WALL.floor[0], WALL.floor[1], (h % 5) / 4));
+      g.rect(x, y + VOXEL - 0.5, VOXEL, 0.5).rect(x + VOXEL - 0.5, y, 0.5, VOXEL).fill(WALL.floorSeam);
+      if (h % 7 === 0) g.rect(x + 2, y + 3, 1, 1).fill(WALL.rivet);
     }
-    g.rect(x + 7, y + 7, 2, 2).fill(COLORS.amber);
   }
-  // Neon trim on every top edge that faces into the room or a doorway.
-  const trim = frame ? COLORS.amber : WALL.trim;
-  if (inside(0, 1)) g.rect(x, y + TILE - 1, TILE, 0.5).fill({ color: trim, alpha: 0.9 });
-  if (inside(0, -1)) g.rect(x, y + 0.5, TILE, 0.5).fill({ color: trim, alpha: 0.9 });
-  if (inside(1, 0)) g.rect(x + TILE - 1, y, 0.5, TILE).fill({ color: trim, alpha: 0.9 });
-  if (inside(-1, 0)) g.rect(x + 0.5, y, 0.5, TILE).fill({ color: trim, alpha: 0.9 });
+  return g;
+}
 
-  // Front face: all of it, or as much as shows over a lower block in front.
-  const below = r + 1 === ROWS - 1 ? STACK.nearWall : STACK.wall;
-  const face = piece(0, 1) && r < ROWS - 1 ? height - below : height;
-  if (face <= 0) return;
-  const fy = y + TILE;
-  const bands = face * 2;
-  for (let i = 0; i < bands; i++) g.rect(x, fy + i / 2, TILE, 0.5).fill(mix(WALL.faceTop, WALL.faceBottom, i / (bands - 1)));
-  // The lit edge where top meets front, seams between panels, and the glow strip at the floor.
-  g.rect(x, fy, TILE, 0.5).fill(WALL.edge);
-  if (c % 2 === 0) g.rect(x, fy + 0.5, 0.5, face - 0.5).fill(WALL.seam);
-  if (face < height) return;
-  if (frame) g.rect(x + 6, fy + 1.5, 4, face - 3).fill({ color: COLORS.amber, alpha: 0.75 });
-  else if (face > 6 && hash(c, r) % 4 === 0) g.rect(x + 11, fy + 3, 1, 1).fill(hash(c, r) % 8 === 0 ? COLORS.danger : COLORS.beam);
-  g.rect(x, fy + face - 0.5, TILE, 0.5).fill({ color: frame ? COLORS.amber : WALL.trim, alpha: 0.6 });
+/** One wall tile's four voxels, back row first, around the wall's `height`. Door frames are brass. */
+function drawTile(g: Graphics, c: number, r: number, height: number, frame: boolean) {
+  const tx = c * TILE, ty = HUD_H + r * TILE;
+  for (const vr of [0, 1]) {
+    for (const vc of [0, 1]) {
+      const k = hash(c * 2 + vc, r * 2 + vr);
+      const h = Math.max(2, height + ((k % 5) - 2));
+      const base = frame ? WALL.frame[k % WALL.frame.length] : WALL.stone[k % WALL.stone.length];
+      const x = tx + vc * VOXEL, ground = ty + vr * VOXEL, top = ground - h;
+      // Top, with a lit back and left edge.
+      g.rect(x, top, VOXEL, VOXEL).fill(mix(base, 0xffffff, 0.12));
+      g.rect(x, top, VOXEL, 0.5).rect(x, top, 0.5, VOXEL).fill(mix(base, 0xffffff, 0.3));
+      if (frame && k % 3 === 0) g.rect(x + 3, top + 3, 2, 2).fill(COLORS.amber);
+      // Front, darkening toward the floor, with a shadow on its right edge.
+      const faceTop = top + VOXEL, faceBottom = ground + VOXEL;
+      for (let fy = faceTop; fy < faceBottom; fy++) g.rect(x, fy, VOXEL, 1).fill(mix(base, COLORS.void, 0.35 + (0.4 * (fy - faceTop)) / Math.max(1, faceBottom - faceTop)));
+      g.rect(x + VOXEL - 0.5, faceTop, 0.5, faceBottom - faceTop).fill({ color: COLORS.void, alpha: 0.5 });
+    }
+  }
 }
 
 /**
- * The room's walls as pieces to sort in with everything else: the back and near walls as one piece each (everything
- * in them is the same depth), the side walls a tile at a time.
+ * The walls as Graphics to add to the depth-sorted actors: the top and bottom rows are one piece each; side-wall
+ * tiles are one each, so a ship beside a wall sorts in front of the blocks behind it and behind the ones in front.
  */
 export function buildWalls(room: Room): Graphics[] {
   const top = new Graphics(), bottom = new Graphics();
-  const pieces: Graphics[] = [top, bottom];
+  const pieces = [top, bottom];
   top.zIndex = HUD_H + TILE;
   bottom.zIndex = HUD_H + ROWS * TILE;
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (!isEdge(c, r) || inDoor(room, c, r)) continue;
+      if (!isEdge(c, r) || inDoor(room, c, r) || !isWall(room, c, r)) continue;
       let g = r === 0 ? top : r === ROWS - 1 ? bottom : undefined;
       if (!g) {
         g = new Graphics();
         g.zIndex = HUD_H + (r + 1) * TILE;
         pieces.push(g);
       }
-      drawBlock(g, room, c, r);
+      drawTile(g, c, r, r === ROWS - 1 ? STACK.nearWall : STACK.wall, besideDoor(room, c, r));
     }
   }
   return pieces;
