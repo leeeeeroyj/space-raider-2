@@ -1,15 +1,19 @@
 <div align="center">
 
-# Space Raider
+# Space Raider 2
 
 **Blast the hostiles. Grab what glows. Get out alive.**
 
 A twin-stick vault raid across 36 rooms, with neon effects. It runs in the browser on desktop, gamepad or phone.
 
-### [▶ Play it now](https://leeeeeroyj.github.io/space-raider/)
+This is the second version, rebuilt on PixiJS and in progress: next come a 3D-looking stacked-sprite style, items that
+upgrade your weapon and cargo hold, and generated music. The original is at
+[leeeeeroyj/space-raider](https://github.com/leeeeeroyj/space-raider).
 
-[![Deploy](https://github.com/leeeeeroyj/space-raider/actions/workflows/deploy.yml/badge.svg)](https://github.com/leeeeeroyj/space-raider/actions/workflows/deploy.yml)
-![Phaser 4](https://img.shields.io/badge/Phaser-4-8a5cf6)
+### [▶ Play it now](https://leeeeeroyj.github.io/space-raider-2/)
+
+[![Deploy](https://github.com/leeeeeroyj/space-raider-2/actions/workflows/deploy.yml/badge.svg)](https://github.com/leeeeeroyj/space-raider-2/actions/workflows/deploy.yml)
+![PixiJS 8](https://img.shields.io/badge/PixiJS-8-e91e63)
 ![TypeScript](https://img.shields.io/badge/TypeScript-7-3178c6?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -87,27 +91,29 @@ Every push to `main` builds the game and deploys it to GitHub Pages.
 src/
   main.ts            game setup
   config.ts          tunables: speeds, points, colours, effect settings
+  engine/            screens, clock (timers and tweens), collisions, input, textures, text
+  screens/           title screen, game room and HUD
+  room/              room geometry and the attract demo's pilot
   vault.ts           vault generation (maze, loot, hostiles)
-  controls.ts        keyboard, mouse and gamepad input
   touch.ts           on-screen touch sticks
   effects.ts         warp grid, sparks, bloom, screen wobble
   sfx.ts             procedural sound effects
   hi.ts              the high score, kept in localStorage
   attract.ts         the ?attract demo mode's settings
-  scenes/            title screen, game room and HUD
 assets/sprites/      the game's 16 × 16 sprites
 design/              concept sheet used to pick the sprites
 tools/sprites.py     sprite search and export script
 tools/cdp.mjs        headless Chrome harness for the tests
 tools/pause-hi-test.mjs  checks pause and the high score
 tools/attract-test.mjs   checks the ?attract demo
+tools/touch-test.mjs     checks the touch sticks and tap to retry
 ```
 
 ## Credits
 
 - **Sprites:** from the CC0 [Angais/pixel-art-atlas-1.4m](https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m) collection of AI-generated pixel art, found with [Pixel Search](https://huggingface.co/spaces/cfahlgren1/pixel-search).
 - **Font:** [Silkscreen](https://fonts.google.com/specimen/Silkscreen) by Jason Kottke (SIL Open Font License).
-- **Engine:** [Phaser](https://phaser.io/).
+- **Engine:** [PixiJS](https://pixijs.com/), with filters from [pixi-filters](https://github.com/pixijs/filters).
 - **Inspiration:** Taito's *Space Dungeon* arcade game. Space Raider is an original game and isn't affiliated with or endorsed by the original's rights holders.
 
 ## License
