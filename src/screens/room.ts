@@ -18,6 +18,7 @@ import { Pilot } from '../room/pilot';
 import { Stack } from '../render/stack';
 import { itemColor, itemIcon } from '../render/icons';
 import { buildWalls, drawWallShade } from '../render/walls';
+import { ROOM_STYLE, STYLES } from '../render/roomStyles';
 import { duckMusic, pauseMusic, playMusic, setMood, stopMusic } from '../audio/music';
 import { loopSound, playSound, toggleMusic, toggleMute, type Loop } from '../sfx';
 import { touchSticks } from '../touch';
@@ -106,7 +107,7 @@ export class RoomScreen implements Screen {
   private readonly roomTop = new Container();
   /** Everything that stands up (walls, the ship, hostiles, loot, the pad, bolts), drawn back to front by floor y. */
   private readonly actors = new Container();
-  private wallPieces: Graphics[] = [];
+  private wallPieces: Container[] = [];
   private readonly sparkleLayer = new Container();
   readonly banner: Text;
   readonly subBanner: Text;
@@ -179,7 +180,7 @@ export class RoomScreen implements Screen {
       o.zIndex = z;
       return this.world.addChild(o);
     };
-    at(this.drawFloor(), Z.floor);
+    at(STYLES[ROOM_STYLE]?.floor() ?? this.drawFloor(), Z.floor);
     at(this.fx.floor, Z.grid);
     at(this.roomFloor, Z.floorFx);
     this.actors.sortableChildren = true;
@@ -531,8 +532,11 @@ export class RoomScreen implements Screen {
         }
       }
     }
-    this.roomFloor.addChild(drawWallShade(), glow);
-    this.wallPieces = buildWalls(room);
+    const style = STYLES[ROOM_STYLE];
+    if (!style || style.shade) this.roomFloor.addChild(drawWallShade());
+    if (!style || style.doorGlow) this.roomFloor.addChild(glow);
+    else glow.destroy();
+    this.wallPieces = style ? style.walls(room) : buildWalls(room);
     this.actors.addChild(...this.wallPieces);
     this.clock.tween(glow, { alpha: 0.4 }, { ms: 900, yoyo: true, repeat: -1 });
   }
