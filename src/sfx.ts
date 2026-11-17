@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import { ATTRACT } from './attract';
 
 type Wave = 'square' | 'saw' | 'triangle' | 'sine' | 'noise';
 
@@ -46,10 +46,7 @@ export const SOUNDS = {
 } satisfies Record<string, Voice>;
 
 export type SoundName = keyof typeof SOUNDS;
-const cacheKey = (name: SoundName) => `sfx-${name}`;
 const MUTE_STORAGE = 'space-raider-muted';
-/** Registry key holding the mute setting. Phaser's own `sound.mute` reads back stale until audio is running, so it isn't the source of truth. */
-export const MUTED = 'muted';
 
 function render(ctx: BaseAudioContext, v: Voice): AudioBuffer {
   const rate = ctx.sampleRate;
@@ -89,42 +86,95 @@ function render(ctx: BaseAudioContext, v: Voice): AudioBuffer {
   return buffer;
 }
 
-/** Builds every sound into Phaser's audio cache. Without Web Audio the game just stays silent. */
-export function registerSounds(scene: Phaser.Scene) {
-  if (!(scene.sound instanceof Phaser.Sound.WebAudioSoundManager)) return;
-  for (const [name, voice] of Object.entries(SOUNDS) as Array<[SoundName, Voice]>) {
-    if (!scene.cache.audio.exists(cacheKey(name))) scene.cache.audio.add(cacheKey(name), render(scene.sound.context, voice));
-  }
-}
+let ctx: AudioContext | undefined;
+let master: GainNode | undefined;
+const buffers = new Map<SoundName, AudioBuffer>();
+let muted = false;
+let played = 0;
+let started = false;
 
-export function playSound(scene: Phaser.Scene, name: SoundName, config?: Phaser.Types.Sound.SoundConfig) {
-  if (scene.cache.audio.exists(cacheKey(name))) scene.sound.play(cacheKey(name), config);
-}
-
-/** A looping sound you start and stop yourself, removed when the scene shuts down. */
-export function loopSound(scene: Phaser.Scene, name: SoundName) {
-  if (!scene.cache.audio.exists(cacheKey(name))) return undefined;
-  const sound = scene.sound.add(cacheKey(name), { loop: true }) as Phaser.Sound.WebAudioSound;
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sound.destroy());
-  return sound;
-}
-
-export function restoreMute(scene: Phaser.Scene) {
-  if (scene.registry.has(MUTED)) return;
-  let muted = false;
+/**
+ * Gets sound ready: reads the mute setting, then makes the audio context and builds every sound on the first key press,
+ * click or tap (browsers only let a page start audio after one). Never in attract mode, which makes no sound.
+ */
+export function initAudio() {
+  if (ATTRACT || started) return;
+  started = true;
   try {
     muted = localStorage.getItem(MUTE_STORAGE) === '1';
   } catch {
     // Storage blocked: sound stays on.
   }
-  scene.registry.set(MUTED, muted);
-  scene.sound.mute = muted;
+  const unlock = () => {
+    if (!ctx) {
+      ctx = new AudioContext();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : 1;
+      master.connect(ctx.destination);
+      for (const [name, voice] of Object.entries(SOUNDS) as Array<[SoundName, Voice]>) buffers.set(name, render(ctx, voice));
+    }
+    if (ctx.state === 'suspended') void ctx.resume();
+  };
+  window.addEventListener('keydown', unlock, true);
+  window.addEventListener('pointerdown', unlock, true);
+}
+/** Plays a sound once. `detune` is in cents. Does nothing until the first key press or tap, or while muted. */
+export function playSound(name: SoundName, o: { detune?: number } = {}) {
+  const buffer = buffers.get(name);
+  if (!ctx || !master || !buffer) return;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.detune.value = o.detune ?? 0;
+  src.connect(master);
+  src.start();
+  played++;
 }
 
-export function toggleMute(scene: Phaser.Scene) {
-  const muted = scene.registry.get(MUTED) !== true;
-  scene.registry.set(MUTED, muted);
-  scene.sound.mute = muted;
+export interface Loop {
+  readonly isPlaying: boolean;
+  play(): void;
+  stop(): void;
+  setDetune(cents: number): void;
+}
+
+/** A looping sound you start and stop yourself. Call stop() when its screen goes. */
+export function loopSound(name: SoundName): Loop {
+  let src: AudioBufferSourceNode | undefined;
+  let detune = 0;
+  return {
+    get isPlaying() {
+      return src !== undefined;
+    },
+    play() {
+      const buffer = buffers.get(name);
+      if (src || !ctx || !master || !buffer) return;
+      src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.detune.value = detune;
+      src.connect(master);
+      src.start();
+      played++;
+    },
+    stop() {
+      src?.stop();
+      src?.disconnect();
+      src = undefined;
+    },
+    setDetune(cents: number) {
+      detune = cents;
+      if (src) src.detune.value = cents;
+    },
+  };
+}
+
+export const isMuted = () => muted;
+/** Sounds started since the page loaded (the attract test checks there are none). */
+export const soundsPlayed = () => played;
+
+export function toggleMute() {
+  muted = !muted;
+  if (master) master.gain.value = muted ? 0 : 1;
   try {
     localStorage.setItem(MUTE_STORAGE, muted ? '1' : '0');
   } catch {

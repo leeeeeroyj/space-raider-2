@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { TOUCH_STICKS, WIDTH } from './config';
 
 export type ThumbStick = 'move' | 'aim';
@@ -13,7 +12,7 @@ type Layout = { radius: number; centers: Record<ThumbStick, { x: number; y: numb
 /**
  * The two touch sticks, drawn as page elements so they can sit in the empty bars beside the game on wide phones.
  * When the bars are too narrow they sit over the game's bottom corners instead (TOUCH_STICKS).
- * Touches are read from the whole page, because Phaser only hears touches that start on its canvas.
+ * Touches are read from the whole page, so a thumb can land in the bars beside the canvas.
  */
 class TouchSticks {
   /** Which touch (pointerId) holds each stick, and where that finger is now (CSS px). */
@@ -50,12 +49,12 @@ class TouchSticks {
   }
 
   /** The thumb's offset from the stick's centre, -1..1 on each axis and clamped to the rim. Also redraws the knobs. */
-  vector(which: ThumbStick): Phaser.Math.Vector2 | undefined {
+  vector(which: ThumbStick): { x: number; y: number } | undefined {
     const h = this.held[which];
     if (!h) return undefined;
     const { radius, centers } = this.layout();
-    const v = new Phaser.Math.Vector2(h.x - centers[which].x, h.y - centers[which].y).scale(1 / radius);
-    return v.length() > 1 ? v.normalize() : v;
+    const x = (h.x - centers[which].x) / radius, y = (h.y - centers[which].y) / radius, l = Math.hypot(x, y);
+    return l > 1 ? { x: x / l, y: y / l } : { x, y };
   }
 
   /** Redraws both sticks. Call once per frame while playing. */

@@ -38,17 +38,15 @@ export const TEXT = {
 
 export const FONT = 'Silkscreen, monospace';
 
-/** Registry key for the aim mode, shared by the title screen and the room. true = 8-way, false = 360°. */
-export const SNAP8 = 'snap8';
 /** 8-way aim is built but switched off for now: no menu item, and Q / Back do nothing. */
 export const AIM_MODE_SELECTABLE = false;
-/** Registry key the room writes its HUD state to each frame; the HUD scene reads it. */
-export const HUD_STATE = 'hudState';
+/** The aim mode, shared by the title screen and the room. true = 8-way, false = 360°. */
+export const aimMode = { snap8: false };
 
 /**
- * The canvas renders at this multiple of the 416×228 design size. Game scenes zoom their camera by it,
- * so sprites look as before, while the HUD scene zooms by half as much and can show native 16px sprites
- * at half the size of room sprites without shrinking (and distorting) them.
+ * The canvas renders at this multiple of the 416×228 design size. The room is drawn scaled up by it, while the HUD is
+ * scaled by half as much and can show native 16px sprites at half the size of room sprites without shrinking (and
+ * distorting) them.
  */
 export const RENDER_SCALE = 4;
 export const HUD_SCALE = RENDER_SCALE / 2;
@@ -57,9 +55,11 @@ export const HUD_SCALE = RENDER_SCALE / 2;
 export const FX = {
   /** Springy neon grid over the floor. Spacing in design pixels; stiffness pulls back to rest, coupling spreads ripples. */
   grid: { enabled: true, spacing: 8, stiffness: 18, coupling: 700, damping: 3.5, maxOffset: 7, lineWidth: 0.5, alpha: 0.13, flashAlpha: 0.2, hueCycleSeconds: 24 },
-  /** Bright things (above `threshold`) get a soft halo. */
-  /** Each blur step is a full-screen pass, the costliest part of the effects; fewer, wider steps are cheaper. */
-  bloom: { enabled: true, threshold: 0.45, spread: 1.4, offset: 3, steps: 2, amount: 0.75 },
+  /**
+   * Bright things (above `threshold`) get a soft halo, worked out at design size and laid over the room. `blur` is in
+   * design pixels and `quality` is its number of passes; `scale` is how strong the halo is.
+   */
+  bloom: { enabled: true, threshold: 0.45, scale: 0.9, blur: 3, quality: 4 },
 };
 
 /** Spark colours when each kind blows up or takes damage. */

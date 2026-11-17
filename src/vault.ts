@@ -1,5 +1,5 @@
-import Phaser from 'phaser';
 import { COLS, HUNTER, ROWS, tileCenter, type TreasureKind } from './config';
+import { Rng } from './engine/rng';
 
 /** The vault is GRID × GRID rooms. */
 export const GRID = 6;
@@ -63,7 +63,7 @@ const LOOT_COUNT_ODDS = [0.2, 0.4, 0.3, 0.1]; // chance of 0, 1, 2, 3 treasures 
 const FOE_ODDS = { sentry: 0.22, mine: 0.35, warden: 0.45, brood: 0.1, perLevel: 0.05 };
 const CORNERS = [tileCenter(1, 1), tileCenter(COLS - 2, 1), tileCenter(1, ROWS - 2), tileCenter(COLS - 2, ROWS - 2)];
 
-function pickWeighted<T>(rnd: Phaser.Math.RandomDataGenerator, options: Array<[T, number]>): T {
+function pickWeighted<T>(rnd: Rng, options: Array<[T, number]>): T {
   let roll = rnd.frac();
   for (const [value, weight] of options) {
     if ((roll -= weight) < 0) return value;
@@ -73,7 +73,7 @@ function pickWeighted<T>(rnd: Phaser.Math.RandomDataGenerator, options: Array<[T
 
 /** Builds a vault: a random spanning tree of doors plus a few loops, then fills rooms. Same seed, same vault. */
 export function generateVault(level: number, seed: string): Vault {
-  const rnd = new Phaser.Math.RandomDataGenerator([seed]);
+  const rnd = new Rng(seed);
   const rooms: Room[] = [];
   for (let row = 0; row < GRID; row++) {
     for (let col = 0; col < GRID; col++) rooms.push({ col, row, doors: {}, loot: [], hunters: 0, foes: [], visited: false });

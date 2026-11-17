@@ -1,5 +1,5 @@
 {
-  "name": "space-raider",
+  "name": "space-raider-2",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -9,11 +9,12 @@
     "preview": "vite preview",
     "typecheck": "tsc"
   },
-  "dependencies": {
-    "phaser": "^4.2.1"
-  },
   "devDependencies": {
     "typescript": "^7.0.2",
     "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.23.0"
   }
 }

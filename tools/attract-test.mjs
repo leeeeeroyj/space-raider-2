@@ -6,21 +6,21 @@ import { session } from './cdp.mjs';
 
 // ---- What differs per game ----
 const G = 'window.__spaceRaider';
-const S = `${G}.scene.getScene('room')`;
+const S = `${G}.screen`;
 const GAME = {
   port: 5246, debugPort: 9416,
   /** Gameplay is up: a room runs and the title doesn't. */
-  playing: `${G}.scene.isActive('room') && !${G}.scene.isActive('title') && !!${G}.registry.get('hudState')`,
+  playing: `${G}.screen?.name === 'room' && !!${S}.vault`,
   /** Demos started so far. */
   demos: `${S}.constructor.demos`,
   /** The ship's position. */
   pos: `[${S}.player.x, ${S}.player.y]`,
   /** The core verb near a threat: the beam on a hostile. */
-  verb: `!!${S}.flashed && ${S}.flashed.active`,
+  verb: `!!${S}.flashed`,
   /** Sounds made (none can be without an audio context). */
-  played: `${G}.sound.sounds.length`,
+  played: `${G}.soundsPlayed()`,
   /** Anything a player's input would change. */
-  state: `({ paused: ${S}.paused, title: ${G}.scene.isActive('title') })`,
+  state: `({ paused: ${S}.paused, title: ${G}.screen.name === 'title' })`,
   /** The longest the ship may sit still (being destroyed and coming back counts), s. */
   stillMax: 2.5,
 };

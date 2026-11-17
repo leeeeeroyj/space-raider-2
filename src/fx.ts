@@ -1,44 +1,57 @@
-import Phaser from 'phaser';
+import { Container, Sprite } from 'pixi.js';
 import { COLORS } from './config';
+import { EASE, type Clock } from './engine/clock';
+import { rand } from './engine/rng';
+import { glowTexture, hex, named } from './engine/textures';
 
-const SPARKLE = 'fx-sparkle';
-
-/** A pulsing glow (WebGL only). The pulse tween is removed with the object, so rooms can be rebuilt freely. */
-export function addGlow<T extends Phaser.GameObjects.GameObject>(scene: Phaser.Scene, obj: T, color: number): T {
-  if (scene.game.renderer.type !== Phaser.WEBGL) return obj;
-  obj.enableFilters();
-  const glow = obj.filters?.internal.addGlow(color, 2, 0, 1, false, 10, 6);
-  if (!glow) return obj;
-  glow.setPaddingOverride(null);
-  const pulse = scene.tweens.add({ targets: glow, outerStrength: 4.5, duration: 700 + Math.random() * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-  obj.once(Phaser.GameObjects.Events.DESTROY, () => pulse.remove());
+/**
+ * A pulsing glow behind `obj`'s sprite: a soft halo added to `obj` itself, so it moves and goes with it.
+ * `size` is the halo's diameter in design pixels.
+ */
+export function addGlow<T extends Container>(clock: Clock, obj: T, color: number, size = 26): T {
+  const halo = new Sprite(glowTexture());
+  halo.anchor.set(0.5);
+  halo.tint = color;
+  halo.blendMode = 'add';
+  halo.width = halo.height = size;
+  halo.alpha = 0.45;
+  obj.addChildAt(halo, 0);
+  clock.tween(halo, { alpha: 0.9 }, { ms: 700 + Math.random() * 300, yoyo: true, repeat: -1, ease: EASE.sineInOut });
   return obj;
 }
 
 /** Marks an object as loot with a gold glow, so treasure reads differently from hostiles. */
-export const addTreasureGlow = <T extends Phaser.GameObjects.GameObject>(scene: Phaser.Scene, obj: T) => addGlow(scene, obj, COLORS.loot);
+export const addTreasureGlow = <T extends Container>(clock: Clock, obj: T) => addGlow(clock, obj, COLORS.loot);
 
-/** Every `everyMs`, puts a short-lived glint on one of the objects `targets()` returns. */
-export function startSparkles(scene: Phaser.Scene, targets: () => Phaser.GameObjects.Components.Transform[], everyMs = 450) {
-  if (!scene.textures.exists(SPARKLE)) {
-    const g = scene.make.graphics({}, false);
-    g.fillStyle(0xffffff).fillRect(2, 0, 1, 5).fillRect(0, 2, 5, 1);
-    g.fillStyle(COLORS.loot).fillRect(2, 2, 1, 1);
-    g.generateTexture(SPARKLE, 5, 5);
-    g.destroy();
-  }
-  scene.time.addEvent({
-    delay: everyMs,
-    loop: true,
-    callback: () => {
-      const list = targets();
-      if (!list.length) return;
-      const t = Phaser.Utils.Array.GetRandom(list);
-      const s = scene.add
-        .image(t.x + Phaser.Math.Between(-6, 6), t.y + Phaser.Math.Between(-6, 4), SPARKLE)
-        .setDepth(30)
-        .setScale(0.4);
-      scene.tweens.add({ targets: s, scale: 1, alpha: 0, duration: 450, ease: 'Quad.out', onComplete: () => s.destroy() });
-    },
+/** Every `everyMs`, puts a short-lived glint in `layer` on one of the objects `targets()` returns. */
+export function startSparkles(clock: Clock, layer: Container, targets: () => Array<{ x: number; y: number }>, everyMs = 450) {
+  const texture = named('fx-sparkle', 5, 5, (ctx) => {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(2, 0, 1, 5);
+    ctx.fillRect(0, 2, 5, 1);
+    ctx.fillStyle = hex(COLORS.loot);
+    ctx.fillRect(2, 2, 1, 1);
   });
+  return clock.every(everyMs, () => {
+    const list = targets();
+    if (!list.length) return;
+    const t = rand.pick(list);
+    const s = new Sprite(texture);
+    s.anchor.set(0.5);
+    s.position.set(t.x + rand.between(-6, 6), t.y + rand.between(-6, 4));
+    s.scale.set(0.4);
+    layer.addChild(s);
+    const k = { scale: 0.4, alpha: 1 };
+    clock.tween(k, { scale: 1, alpha: 0 }, {
+      ms: 450, ease: EASE.quadOut,
+      onUpdate: () => {
+        if (s.destroyed) return;
+        s.scale.set(k.scale);
+        s.alpha = k.alpha;
+      },
+      onComplete: () => {
+        if (!s.destroyed) s.destroy();
+      },
+    });
+  }, layer);
 }
