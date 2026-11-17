@@ -27,7 +27,19 @@ const onFloor = await evaluate(`${S}.room.loot.length`);
 await drop(`for (let i = 0; i < 5; i++) { const l = { kind: 't1_coin', x: p.x, y: p.y }; s.room.loot.push(l); s.placeTreasure(l); }`);
 await sleep(300);
 check('4 treasures go in, the 5th stays on the floor', (await evaluate(`${S}.cargo.length`)) === 4 && (await evaluate(`${S}.room.loot.length`)) === onFloor + 1);
-check('the HUD says the hold is full', (await evaluate(`${hud}.cargoTotal.text`)).startsWith('FULL'));
+check('the HUD says the hold is full', (await evaluate(`${hud}.cargoLabel.text`)) === 'HOLD FULL');
+// A cargo pod turns up within a few rooms of the hold filling (never in the exit room).
+const podRooms = await evaluate(`(() => { const s = ${S}; let room = s.room;
+  for (let n = 1; n <= 6; n++) {
+    const side = ['top', 'right', 'bottom', 'left'].find((d) => room.doors[d] && s.vault.rooms.find((r) => r.col === room.col + ({ left: -1, right: 1 }[d] ?? 0) && r.row === room.row + ({ top: -1, bottom: 1 }[d] ?? 0)) !== s.vault.exit);
+    const next = s.vault.rooms.find((r) => r.col === room.col + ({ left: -1, right: 1 }[side] ?? 0) && r.row === room.row + ({ top: -1, bottom: 1 }[side] ?? 0));
+    s.enterRoom(next, 'left'); room = next;
+    if (next.crates.some((c) => c.item === 'pod')) return n;
+  }
+  return -1; })()`);
+check('a full hold gets a cargo pod within 3 rooms', podRooms >= 1 && podRooms <= 3, `room ${podRooms}`);
+await evaluate(`(() => { const s = ${S}; s.enterRoom(s.vault.entrance); })()`);
+await evaluate(quiet);
 check('HOLD FULL shows (with its blip)', (await evaluate(`${S}.holdFullAt`)) > 0);
 await shot('1-hold-full');
 

@@ -73,6 +73,8 @@ export class Hud {
   private readonly score: Text;
   private readonly cargoValue: Text;
   private readonly cargoTotal: Text;
+  /** CARGO, or FULL in red when the hold is full. */
+  private readonly cargoLabel: Text;
   private readonly shipCount: Text;
   private readonly level: Text;
   private readonly hostiles: Text;
@@ -127,13 +129,13 @@ export class Hud {
     add(this.currentCell);
     clock.tween(this.currentCell, { alpha: 0.2 }, { ms: 400, yoyo: true, repeat: -1 });
     LEGEND.forEach(([cell, s], i) => {
-      const x = PANEL.x + (i % 2) * 80, y = MAP_BOTTOM + 10 + Math.floor(i / 2) * 18;
+      const x = PANEL.x + (i % 2) * 86, y = MAP_BOTTOM + 10 + Math.floor(i / 2) * 18;
       g.rect(x, y + 2, 10, 10).fill(CELL_COLOR[cell]);
       text(x + 16, y, s);
     });
 
     // Cargo tally: one row per tier, so any amount of loot fits in the same space.
-    text(PANEL.x, PANEL.y, 'CARGO');
+    this.cargoLabel = text(PANEL.x, PANEL.y, 'CARGO');
     this.cargoTotal = text(PANEL.right, PANEL.y, '', TEXT.amber, 1, 0);
     g.rect(PANEL.x, PANEL.y + 22, PANEL.right - PANEL.x, 2).fill(COLORS.line);
     this.tiers = Object.fromEntries(
@@ -231,7 +233,9 @@ export class Hud {
     const cargoKey = `${s.cargo.join()}|${s.slots}`;
     if (cargoKey !== this.shownCargo) {
       this.shownCargo = cargoKey;
-      set(this.cargoTotal, s.cargo.length >= s.slots ? `FULL ${pts(total)}` : s.cargo.length ? pts(total) : 'EMPTY', s.cargo.length >= s.slots ? TEXT.danger : TEXT.amber);
+      const full = s.cargo.length >= s.slots;
+      set(this.cargoLabel, full ? 'HOLD FULL' : 'CARGO', full ? TEXT.danger : TEXT.dim);
+      set(this.cargoTotal, s.cargo.length ? pts(total) : 'EMPTY');
       // Filled, open and not-yet-unlocked slots.
       const g = this.slotPips.clear();
       for (let i = 0; i < CARGO.max; i++) {

@@ -152,7 +152,15 @@ export const SCORING = { explorerBonus: 10000, extraShipEvery: 10000 };
 export const BEAM = { damagePerSecond: 5, hitRadius: 7 };
 
 /** The hold: how many treasures you can carry. A cargo pod adds `perPod` slots, up to `max`. Pods are kept when you die. */
-export const CARGO = { start: 4, perPod: 2, max: 10 };
+export const CARGO = {
+  start: 4,
+  perPod: 2,
+  max: 10,
+  /** Once the hold is full, a cargo pod turns up within this many rooms (not the exit room). */
+  podWithinRooms: [1, 3] as [number, number],
+  /** While the hold is full, a crate is this many times likelier to hold a pod. */
+  fullPodBoost: 4,
+};
 
 export type ItemKind = 'overcharge' | 'splitter' | 'lance' | 'ricochet' | 'shield' | 'pod';
 /** Beam mods: you keep each until you lose a ship (the newest goes first). */

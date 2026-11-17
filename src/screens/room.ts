@@ -140,6 +140,8 @@ export class RoomScreen implements Screen {
   mods: BeamMod[] = [];
   shielded = false;
   private holdFullAt = -1e9;
+  /** Rooms to go before a cargo pod turns up, counting down while the hold is full. */
+  roomsToPod: number | undefined;
   private snap8 = AIM_MODE_SELECTABLE && aimMode.snap8;
   dead = false;
   over = false;
@@ -452,6 +454,7 @@ export class RoomScreen implements Screen {
     if (room !== this.vault.exit) this.addSignpost(room);
     if (from) playSound('door');
     for (const loot of room.loot) this.placeTreasure(loot);
+    this.duePod(room);
     for (const crate of room.crates) this.placeCrate(crate);
     if (room === this.vault.exit) {
       const view = new Stack('exit');
@@ -649,6 +652,28 @@ export class RoomScreen implements Screen {
     this.treasures.push({ loot, x: loot.x, y: loot.y, r: 5, view });
   }
 
+  /**
+   * Keeps a full hold from going on too long: a few rooms after it fills, the room you walk into has a cargo pod.
+   * Banking or dropping your cargo calls it off.
+   */
+  private duePod(room: Room) {
+    if (this.cargo.length < this.slots || this.slots >= CARGO.max) this.roomsToPod = undefined;
+    if (this.roomsToPod === undefined || room === this.vault.exit) return;
+    if (--this.roomsToPod > 0) return;
+    this.roomsToPod = undefined;
+    if (room.crates.some((c) => c.item === 'pod')) return;
+    const unopened = room.crates.find((c) => c.item === undefined);
+    if (unopened) {
+      unopened.item = 'pod';
+      return;
+    }
+    // Somewhere open, away from the doors and the middle.
+    const spots = [];
+    for (let r = 3; r <= ROWS - 4; r++) for (let c = 3; c <= COLS - 4; c++) if (Math.abs(c - 10) > 1 || Math.abs(r - 6) > 1) spots.push(tileCenter(c, r));
+    const free = spots.filter((p) => ![...room.loot, ...room.foes, ...room.crates].some((o) => dist(o.x, o.y, p.x, p.y) < 14));
+    room.crates.push({ ...rand.pick(free.length ? free : spots), item: 'pod' });
+  }
+
   /** What a crate holds: something you can still use, decided when you first see it. */
   private pickItem(): ItemKind {
     const usable: Record<ItemKind, boolean> = {
@@ -661,8 +686,11 @@ export class RoomScreen implements Screen {
     };
     const options = (Object.keys(ITEMS.weights) as ItemKind[]).filter((k) => usable[k]);
     if (!options.length) return 'shield';
-    let roll = Math.random() * options.reduce((sum, k) => sum + ITEMS.weights[k], 0);
-    return options.find((k) => (roll -= ITEMS.weights[k]) < 0) ?? options[0];
+    // A full hold makes a pod likelier.
+    const full = this.cargo.length >= this.slots;
+    const weight = (k: ItemKind) => ITEMS.weights[k] * (k === 'pod' && full ? CARGO.fullPodBoost : 1);
+    let roll = Math.random() * options.reduce((sum, k) => sum + weight(k), 0);
+    return options.find((k) => (roll -= weight(k)) < 0) ?? options[0];
   }
 
   private placeCrate(crate: Crate) {
@@ -725,6 +753,10 @@ export class RoomScreen implements Screen {
     this.room.loot.splice(this.room.loot.indexOf(loot), 1);
     this.treasures.splice(this.treasures.indexOf(t), 1);
     this.cargo.push(loot.kind);
+    // A full hold starts the countdown to a cargo pod.
+    if (this.cargo.length >= this.slots && this.slots < CARGO.max && this.roomsToPod === undefined) {
+      this.roomsToPod = rand.between(...CARGO.podWithinRooms);
+    }
     this.floatText(t.x, t.y - 8, `+${TREASURE[loot.kind].name.toUpperCase()}`, TEXT.amber);
     this.fx.pop(t.x, t.y - STACK.mid, [COLORS.loot, COLORS.amber], 24);
     playSound('pickup', { detune: Object.keys(TREASURE).indexOf(loot.kind) * 200 });
