@@ -46,7 +46,15 @@ export class Pilot {
         move.y += (dy / d) * 2.2 * (1 - d / reach);
       }
     }
-    for (const b of r.bolts) {
+    // Off a mortar ring before the shell lands.
+    for (const s of r.shells) {
+      const dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 24) {
+        move.x += (dx / d) * 2;
+        move.y += (dy / d) * 2;
+      }
+    }
+    for (const b of r.shots) {
       const speed = Math.hypot(b.vx, b.vy);
       const dx = p.x - b.x, dy = p.y - b.y;
       if (!speed || Math.hypot(dx, dy) > 48 || dx * b.vx + dy * b.vy < 0) continue;

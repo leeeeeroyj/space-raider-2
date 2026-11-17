@@ -20,7 +20,7 @@ const start = async () => {
 };
 // Something that moves every frame while the raid runs: a mine bouncing round the room.
 const mine = `Object.assign(${S}.addEnemy('mine', 200, 120), { wakeAt: 0, bouncy: true }) && true`;
-const minePos = () => evaluate(`(() => { const m = ${S}.enemies.find((e) => e.kind === 'mine'); return m ? m.x + m.y : 0; })()`);
+const minePos = () => evaluate(`(() => { const m = ${S}.enemies.find((e) => e.kind === 'mine'); return m ? m.x + ',' + m.y : ''; })()`);
 
 await until(() => evaluate(`!!${G}`));
 await evaluate(`localStorage.clear()`);

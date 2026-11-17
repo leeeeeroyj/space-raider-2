@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, type Text } from 'pixi.js';
 import {
-  AIM_MODE_SELECTABLE, BEAM, BROOD, CARGO, COLORS, ITEMS, COLS, HOSTILE_COLORS, HUD_H, HUNTER, INTERIOR, MINE, PLAYER, RENDER_SCALE, ROOM_H,
+  AIM_MODE_SELECTABLE, BEAM, BROOD, CARGO, COLORS, FIRE_FASTER_PER_VAULT, ITEMS, COLS, HOSTILE_COLORS, HUD_H, HUNTER, INTERIOR, MINE, PLAYER, RENDER_SCALE, ROOM_H,
   ROOM_W, ROWS, SCAVENGER, SCORING, SENTRY, STACK, TEXT, TILE, TREASURE, WARDEN, aimMode, tileCenter, type BeamMod, type ItemKind, type TreasureKind,
 } from '../config';
 import { DEMO_SECS } from '../attract';
@@ -13,7 +13,7 @@ import { label, zone } from '../engine/text';
 import { Effects } from '../effects';
 import { addGlow, addTreasureGlow, startSparkles } from '../fx';
 import { loadHi, saveHi } from '../hi';
-import { boltTexture, CENTER, doorTiles, entryPoint, inDoor, insideInterior, isEdge, isWall, signTexture } from '../room/geometry';
+import { boltTexture, CENTER, doorTiles, entryPoint, inDoor, insideInterior, isEdge, isWall, shardTexture, shellTexture, sporeTexture } from '../room/geometry';
 import { Pilot } from '../room/pilot';
 import { Stack } from '../render/stack';
 import { itemColor, itemIcon } from '../render/icons';
@@ -46,6 +46,9 @@ export interface Enemy extends Body {
   nextShotAt?: number;
   warned?: boolean;
   nextHatchAt?: number;
+  /** Brood pods: when the next spore comes. Wardens: when the next mortar shell can go. */
+  nextSpitAt?: number;
+  nextLobAt?: number;
   wakeAt?: number;
   // Scavenger only.
   shoo?: number;
@@ -56,7 +59,24 @@ export interface Enemy extends Body {
   gone?: boolean;
 }
 
-interface Bolt extends Body {
+/** What hostiles fire: a sentry's bolt, a brood pod's homing spore, a mine's shrapnel. */
+type ShotKind = 'bolt' | 'spore' | 'shard';
+interface Shot extends Body {
+  kind: ShotKind;
+  view: Sprite;
+  /** Spores fade and shards fall short: gone at this time. */
+  dieAt?: number;
+}
+
+/** A warden's mortar shell, in the air from the warden to a ring on the floor where it will land. */
+interface Shell {
+  x: number;
+  y: number;
+  fromX: number;
+  fromY: number;
+  firedAt: number;
+  landAt: number;
+  ring: Graphics;
   view: Sprite;
 }
 
@@ -116,7 +136,8 @@ export class RoomScreen implements Screen {
   readonly player: Body & { view: Stack; visible: boolean };
   enemies: Enemy[] = [];
   scavenger: Enemy | undefined;
-  bolts: Bolt[] = [];
+  shots: Shot[] = [];
+  shells: Shell[] = [];
   private treasures: Treasure[] = [];
   private crates: CrateView[] = [];
   private pad: (Body & { view: Stack }) | undefined;
@@ -139,6 +160,8 @@ export class RoomScreen implements Screen {
   /** Beam mods, oldest first: losing a ship takes the newest. */
   mods: BeamMod[] = [];
   shielded = false;
+  /** Found a NAV CHIP: the sidebar shows which way the exit is, for the rest of the game. */
+  navChip = false;
   private holdFullAt = -1e9;
   private snap8 = AIM_MODE_SELECTABLE && aimMode.snap8;
   dead = false;
@@ -288,7 +311,7 @@ export class RoomScreen implements Screen {
       this.updateEnemies(now);
       this.updateScavenger(now);
       this.physics(dt);
-      this.updateBolts();
+      this.updateShots(now, dt);
       this.updateBeam(controls.fire && !this.dead, controls.aim, dt);
       this.checkDoorways();
     }
@@ -308,6 +331,7 @@ export class RoomScreen implements Screen {
     return {
       score: this.score, lives: this.lives, cargo: this.cargo, device: this.device, level: this.vault.level,
       slots: this.slots, overcharge: this.overcharge, mods: this.mods, shielded: this.shielded,
+      nav: this.navChip, exitDir: this.exitDir(),
       hostiles: hostileCount(this.room),
       map: {
         cells: this.vault.rooms.map(mapCell),
@@ -363,7 +387,7 @@ export class RoomScreen implements Screen {
       s.x += s.vx * dt;
       s.y += s.vy * dt;
     }
-    for (const b of this.bolts) {
+    for (const b of this.shots) {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
     }
@@ -371,7 +395,7 @@ export class RoomScreen implements Screen {
     if (this.dead) return;
     for (const e of [...this.enemies]) if (overlaps(p, e)) this.onEnemyTouch(e);
     if (this.scavenger && overlaps(p, this.scavenger)) this.onScavengerTouch(this.scavenger);
-    for (const b of [...this.bolts]) if (overlaps(p, b)) this.onBolt(b);
+    for (const b of [...this.shots]) if (overlaps(p, b)) this.onShot(b);
     for (const t of [...this.treasures]) if (overlaps(p, t)) this.collect(t);
     for (const c of [...this.crates]) if (overlaps(p, c)) this.openCrate(c);
     if (this.pad && overlaps(p, this.pad)) this.bank();
@@ -408,7 +432,24 @@ export class RoomScreen implements Screen {
       else if (e.kind === 'sentry') e.view.spin = Math.atan2(p.y - e.y, p.x - e.x) - Math.PI / 2;
     }
     if (this.scavenger) place(this.scavenger.view, this.scavenger.x, this.scavenger.y);
-    for (const b of this.bolts) place(b.view, b.x, b.y);
+    // Shots fly at beam height; mortar shells arc over to their ring, which tightens as they come down.
+    const now = this.clock.now;
+    for (const b of this.shots) {
+      b.view.position.set(b.x, b.y - STACK.beamZ);
+      b.view.zIndex = b.y;
+      if (b.kind === 'spore') {
+        b.view.scale.set(1 + Math.sin(now / 70) * 0.15);
+        if (b.dieAt !== undefined) b.view.alpha = clamp((b.dieAt - now) / 500, 0, 1);
+      }
+    }
+    for (const s of this.shells) {
+      const t = clamp((now - s.firedAt) / (s.landAt - s.firedAt), 0, 1);
+      const x = s.fromX + (s.x - s.fromX) * t, y = s.fromY + (s.y - s.fromY) * t;
+      s.view.position.set(x, y - STACK.beamZ - Math.sin(Math.PI * t) * WARDEN.mortar.arc);
+      s.view.zIndex = y;
+      s.ring.scale.set(1 + 0.6 * (1 - t));
+      s.ring.alpha = Math.floor(now / 90) % 2 ? 1 : 0.55;
+    }
     for (const t of this.treasures) {
       t.view.zIndex = t.y;
       t.view.spin = secs * STACK.spin.loot * turn + t.x;
@@ -449,7 +490,6 @@ export class RoomScreen implements Screen {
     this.room = room;
     room.visited = true;
     this.buildWalls(room);
-    if (room !== this.vault.exit) this.addSignpost(room);
     if (from) playSound('door');
     for (const loot of room.loot) this.placeTreasure(loot);
     for (const crate of room.crates) this.placeCrate(crate);
@@ -463,6 +503,9 @@ export class RoomScreen implements Screen {
       addGlow(this.clock, view, COLORS.beam);
       this.actors.addChild(view);
       this.pad = { x: CENTER.x, y: CENTER.y, vx: 0, vy: 0, r: 4, view };
+      const sign = label('>> EXIT VAULT <<', CENTER.x, CENTER.y + 15, 8, TEXT.beam, { res: RENDER_SCALE, ax: 0.5, ay: 0.5 });
+      this.roomFloor.addChild(sign);
+      this.clock.tween(sign, { alpha: 0.65 }, { ms: 700, yoyo: true, repeat: -1, ease: EASE.sineInOut });
       this.showBanner('EXTRACTION', 'FLY ONTO THE PAD TO BANK YOUR CARGO\nAND LEAVE THE VAULT', 2200);
     }
 
@@ -475,18 +518,15 @@ export class RoomScreen implements Screen {
     this.fade(COLORS.void, 160);
   }
 
-  /** A floor arrow pointing straight toward the exit room (not the route: you still have to find the doors). */
-  private addSignpost(room: Room) {
-    const a = Math.atan2(this.vault.exit.row - room.row, this.vault.exit.col - room.col);
-    const dir = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
-    const sign = new Container();
-    const arrow = sign.addChild(new Sprite(signTexture(dir)));
-    arrow.anchor.set(0.5);
-    arrow.position.set(CENTER.x, CENTER.y);
-    sign.addChild(label('EXIT', CENTER.x, CENTER.y + 13, 8, TEXT.amber, { res: RENDER_SCALE, ax: 0.5, ay: 0.5 }));
-    sign.alpha = 0.6;
-    this.roomFloor.addChild(sign);
-    this.clock.tween(sign, { alpha: 0.25 }, { ms: 1100, yoyo: true, repeat: -1, ease: EASE.sineInOut });
+  /**
+   * Which way the exit room lies from this one, in eighths of a turn clockwise from east (not the route: you still
+   * have to find the doors). Undefined in the exit room.
+   */
+  private exitDir() {
+    const room = this.room, exit = this.vault.exit;
+    if (room === exit) return undefined;
+    const a = Math.atan2(exit.row - room.row, exit.col - room.col);
+    return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
   }
 
   /** Flying through a doorway past the room's edge takes you into the neighbouring room. */
@@ -541,9 +581,9 @@ export class RoomScreen implements Screen {
     this.takeHit();
   }
 
-  private onBolt(bolt: Bolt) {
+  private onShot(shot: Shot) {
     if (!this.canBeHit()) return;
-    this.removeBolt(bolt);
+    this.removeShot(shot);
     this.takeHit();
   }
 
@@ -674,6 +714,7 @@ export class RoomScreen implements Screen {
       ricochet: !this.mods.includes('ricochet'),
       shield: !this.shielded,
       pod: this.podNeeded(),
+      nav: !this.navChip,
     };
     const options = (Object.keys(ITEMS.weights) as ItemKind[]).filter((k) => usable[k]);
     if (!options.length) return 'shield';
@@ -723,6 +764,9 @@ export class RoomScreen implements Screen {
       case 'shield':
         this.shielded = true;
         return 'SHIELD UP';
+      case 'nav':
+        this.navChip = true;
+        return 'NAV CHIP  EXIT ARROW ON';
       default:
         if (!this.mods.includes(item)) this.mods.push(item);
         return ITEMS[item].name;
@@ -839,7 +883,11 @@ export class RoomScreen implements Screen {
       e.foe = foe;
       if (foe.kind === 'sentry' || foe.kind === 'brood') e.fixed = true;
       if (foe.kind === 'sentry') e.nextShotAt = grace + Math.random() * SENTRY.fireEveryMs;
-      if (foe.kind === 'brood') e.nextHatchAt = grace + BROOD.hatchEveryMs / 2;
+      if (foe.kind === 'brood') {
+        e.nextHatchAt = grace + BROOD.hatchEveryMs / 2;
+        e.nextSpitAt = grace + BROOD.spore.everyMs * rand.float(0.5, 1);
+      }
+      if (foe.kind === 'warden') e.nextLobAt = grace + WARDEN.mortar.everyMs * rand.float(0.3, 0.8);
       if (foe.kind === 'mine') {
         e.bouncy = true;
         e.wakeAt = grace;
@@ -851,7 +899,8 @@ export class RoomScreen implements Screen {
   private clearHostiles() {
     if (this.scavenger) this.scavengerEscapes(this.scavenger);
     for (const e of [...this.enemies]) this.removeEnemy(e);
-    for (const b of [...this.bolts]) this.removeBolt(b);
+    for (const b of [...this.shots]) this.removeShot(b);
+    for (const s of [...this.shells]) this.removeShell(s);
   }
 
   private spawnHunter() {
@@ -896,6 +945,13 @@ export class RoomScreen implements Screen {
         }
         case 'warden':
           this.moveWarden(e);
+          if (now >= e.nextLobAt!) {
+            const m = WARDEN.mortar;
+            if (dist(e.x, e.y, p.x, p.y) <= m.range) {
+              this.lob(e);
+              e.nextLobAt = now + m.everyMs * this.firePace() * rand.float(0.8, 1.2);
+            } else e.nextLobAt = now + 300;
+          }
           break;
         case 'sentry': {
           const shotAt = e.nextShotAt!;
@@ -908,17 +964,27 @@ export class RoomScreen implements Screen {
           }
           if (now >= shotAt) {
             e.warned = false;
-            this.fireBolt(e);
+            this.fire('bolt', e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), SENTRY.boltSpeed);
+            playSound('bolt');
             e.nextShotAt = now + SENTRY.fireEveryMs * rand.float(0.8, 1.2);
           }
           break;
         }
-        case 'brood':
+        case 'brood': {
           if (now >= e.nextHatchAt!) {
             e.nextHatchAt = now + BROOD.hatchEveryMs;
             if (this.broodDrones() < BROOD.maxDrones) this.hatch(e);
           }
+          // Pulses just before it spits a spore.
+          const spore = BROOD.spore;
+          e.view.alpha = now > e.nextSpitAt! - spore.warnMs && Math.floor(now / 60) % 2 ? 0.5 : 1;
+          if (now >= e.nextSpitAt!) {
+            this.fire('spore', e.x, e.y, Math.atan2(p.y - e.y, p.x - e.x), spore.speed, spore.lifeMs);
+            playSound('spore');
+            e.nextSpitAt = now + spore.everyMs * this.firePace() * rand.float(0.8, 1.2);
+          }
           break;
+        }
       }
     }
   }
@@ -940,28 +1006,74 @@ export class RoomScreen implements Screen {
     else moveToward(e, gx, gy, WARDEN.speed);
   }
 
-  private fireBolt(sentry: Enemy) {
-    const view = new Sprite(boltTexture());
-    view.anchor.set(0.5);
-    // Flies at beam height.
-    view.pivot.y = STACK.beamZ;
-    this.actors.addChild(view);
-    const a = Math.atan2(this.player.y - sentry.y, this.player.x - sentry.x);
-    this.bolts.push({ x: sentry.x, y: sentry.y, vx: Math.cos(a) * SENTRY.boltSpeed, vy: Math.sin(a) * SENTRY.boltSpeed, r: 2, view });
-    playSound('bolt');
+  /** Wardens and brood pods fire a little more often each vault: their intervals are multiplied by this. */
+  private firePace() {
+    return 1 / (1 + FIRE_FASTER_PER_VAULT * (this.vault.level - 1));
   }
 
-  private removeBolt(b: Bolt) {
-    this.bolts.splice(this.bolts.indexOf(b), 1);
+  /** A shot from (x, y) at angle `a`. Spores and shards run out after `lifeMs`. */
+  private fire(kind: ShotKind, x: number, y: number, a: number, speed: number, lifeMs?: number) {
+    const view = new Sprite(kind === 'bolt' ? boltTexture() : kind === 'spore' ? sporeTexture() : shardTexture());
+    view.anchor.set(0.5);
+    if (kind === 'shard') view.rotation = a;
+    this.actors.addChild(view);
+    const r = kind === 'spore' ? 3 : 2;
+    const dieAt = lifeMs === undefined ? undefined : this.clock.now + lifeMs;
+    this.shots.push({ kind, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r, view, dieAt });
+  }
+
+  private removeShot(b: Shot) {
+    this.shots.splice(this.shots.indexOf(b), 1);
     b.view.destroy();
   }
 
-  /** Bolts stop at the walls. */
-  private updateBolts() {
-    for (const b of [...this.bolts]) {
+  /** Spores steer toward you; shots stop at the walls or when they run out; shells land. */
+  private updateShots(now: number, dt: number) {
+    const p = this.player;
+    for (const b of [...this.shots]) {
       if (this.dead) b.vx = b.vy = 0;
-      if (!insideInterior(b.x, b.y)) this.removeBolt(b);
+      else if (b.kind === 'spore') {
+        const have = Math.atan2(b.vy, b.vx), want = Math.atan2(p.y - b.y, p.x - b.x);
+        const max = BROOD.spore.turn * dt;
+        const a = have + clamp(Math.atan2(Math.sin(want - have), Math.cos(want - have)), -max, max);
+        b.vx = Math.cos(a) * BROOD.spore.speed;
+        b.vy = Math.sin(a) * BROOD.spore.speed;
+      }
+      if (!insideInterior(b.x, b.y) || (b.dieAt !== undefined && now >= b.dieAt)) this.removeShot(b);
     }
+    for (const s of [...this.shells]) if (now >= s.landAt) this.landShell(s);
+  }
+
+  /** A warden lobs a shell at where you are now: a ring marks the spot until it lands. */
+  private lob(warden: Enemy) {
+    const m = WARDEN.mortar, p = this.player;
+    const x = clamp(p.x, INTERIOR.x0 + 4, INTERIOR.x1 - 4), y = clamp(p.y, INTERIOR.y0 + 4, INTERIOR.y1 - 4);
+    const ring = new Graphics()
+      .circle(0, 0, m.radius).stroke({ width: 1, color: COLORS.danger })
+      .circle(0, 0, m.radius).fill({ color: COLORS.danger, alpha: 0.12 })
+      .rect(-2, -0.5, 4, 1).rect(-0.5, -2, 1, 4).fill(COLORS.danger);
+    ring.position.set(x, y);
+    this.roomFloor.addChild(ring);
+    const view = new Sprite(shellTexture());
+    view.anchor.set(0.5);
+    this.actors.addChild(view);
+    const now = this.clock.now;
+    this.shells.push({ x, y, fromX: warden.x, fromY: warden.y, firedAt: now, landAt: now + m.flightMs, ring, view });
+    playSound('mortar');
+  }
+
+  private removeShell(s: Shell) {
+    this.shells.splice(this.shells.indexOf(s), 1);
+    s.ring.destroy();
+    s.view.destroy();
+  }
+
+  private landShell(s: Shell) {
+    this.removeShell(s);
+    this.fx.burst(s.x, s.y - 2, [COLORS.danger, 0xff9a3d], 'small');
+    playSound('boom');
+    const p = this.player;
+    if (this.canBeHit() && dist(p.x, p.y, s.x, s.y) < WARDEN.mortar.radius + p.r) this.takeHit();
   }
 
   private broodDrones() {
@@ -1000,6 +1112,12 @@ export class RoomScreen implements Screen {
     this.addScore(ENEMY_POINTS[kind]);
     // A brood pod always leaves a crate.
     if (kind === 'brood') this.dropCrate(e.x, e.y);
+    // A mine bursts into shrapnel along its diagonals.
+    if (kind === 'mine') {
+      const s = MINE.shrapnel;
+      for (let i = 0; i < s.count; i++) this.fire('shard', e.x, e.y, Math.PI / 4 + (i * Math.PI * 2) / s.count, s.speed, (s.range / s.speed) * 1000);
+      playSound('shard');
+    }
     if (!hostileCount(this.room) && !e.brood) {
       this.podIfFull(e.x, e.y);
       this.floatText(ROOM_W / 2, HUD_H + 30, 'ROOM SECURE', TEXT.beam);

@@ -160,7 +160,7 @@ export const CARGO = {
   fullPodBoost: 4,
 };
 
-export type ItemKind = 'overcharge' | 'splitter' | 'lance' | 'ricochet' | 'shield' | 'pod';
+export type ItemKind = 'overcharge' | 'splitter' | 'lance' | 'ricochet' | 'shield' | 'pod' | 'nav';
 /** Beam mods: you keep each until you lose a ship (the newest goes first). */
 export type BeamMod = 'splitter' | 'lance' | 'ricochet';
 
@@ -177,8 +177,10 @@ export const ITEMS = {
   /** Takes one hit for you, then gives you `graceMs` to get clear. */
   shield: { name: 'SHIELD', graceMs: 1200 },
   pod: { name: 'CARGO POD' },
+  /** Shows which way the exit is, next to the vault map, for the rest of the game. */
+  nav: { name: 'NAV CHIP' },
   /** How likely each item is in a crate, among those you can still use. */
-  weights: { overcharge: 3, splitter: 2, lance: 2, ricochet: 2, shield: 2, pod: 3 } as Record<ItemKind, number>,
+  weights: { overcharge: 3, splitter: 2, lance: 2, ricochet: 2, shield: 2, pod: 3, nav: 4 } as Record<ItemKind, number>,
   /** Crates per vault, and how much likelier a room with a warden is to hold one. */
   perVault: [2, 3] as [number, number],
   wardenRoom: 3,
@@ -188,9 +190,23 @@ export const ITEMS = {
 
 // The other hostiles. hp is in seconds of beam at damagePerSecond 5 (so hp 5 = one second of fire).
 export const SENTRY = { hp: 0.5, points: 25, fireEveryMs: 2600, telegraphMs: 450, boltSpeed: 75 };
-export const MINE = { hp: 0.5, points: 25, speed: 32 };
-export const WARDEN = { hp: 4, points: 125, speed: 20, hitRadius: 8, guardDistance: 22 };
-export const BROOD = { hp: 5, points: 500, hitRadius: 8, hatchEveryMs: 3200, maxDrones: 3 };
+export const MINE = {
+  hp: 0.5, points: 25, speed: 32,
+  /** Destroyed, it bursts into `count` shards along its diagonals, flying `range` px. */
+  shrapnel: { count: 4, speed: 130, range: 60 },
+};
+export const WARDEN = {
+  hp: 4, points: 125, speed: 20, hitRadius: 8, guardDistance: 22,
+  /** Lobs a shell at where you are when you're within `range`: a ring marks the spot for `flightMs`, then it bursts. */
+  mortar: { everyMs: 3500, range: 110, flightMs: 900, radius: 12, arc: 26 },
+};
+export const BROOD = {
+  hp: 5, points: 500, hitRadius: 8, hatchEveryMs: 3200, maxDrones: 3,
+  /** Spits a slow spore that steers toward you (`turn` radians a second) and fades after `lifeMs`. */
+  spore: { everyMs: 3800, speed: 40, turn: 1.8, lifeMs: 3500, warnMs: 400 },
+};
+/** Hostile fire comes this much more often each vault (vault 1 is × 1). */
+export const FIRE_FASTER_PER_VAULT = 0.06;
 /** Can't be destroyed: shoo it with shooHp of beam. Shows up at most once per room visit, only while you carry cargo. */
 export const SCAVENGER = { points: 50, speed: 52, fleeSpeed: 95, shooHp: 0.4, chance: 0.35, delayMs: [3000, 7000] as const };
 

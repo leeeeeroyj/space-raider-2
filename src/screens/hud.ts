@@ -5,6 +5,7 @@ import type { Device } from '../engine/input';
 import { label, setText as set, zone } from '../engine/text';
 import { tex } from '../engine/textures';
 import { itemIcon } from '../render/icons';
+import { signTexture } from '../room/geometry';
 import { cycleSound, isMuted, soundLabel } from '../sfx';
 import { GRID, type MapCell } from '../vault';
 
@@ -17,6 +18,10 @@ export interface HudState {
   overcharge: number;
   mods: BeamMod[];
   shielded: boolean;
+  /** Has the NAV CHIP: show which way the exit is. */
+  nav: boolean;
+  /** Toward the exit room in eighths of a turn clockwise from east; undefined in the exit room. */
+  exitDir: number | undefined;
   device: Device;
   level: number;
   /** Hostiles left in the current room. */
@@ -63,6 +68,8 @@ const HINTS: Record<Device, string> = {
   touch: 'LEFT CIRCLE MOVE  ·  RIGHT CIRCLE AIM + FIRE',
   kbm: 'WASD MOVE  ·  CLICK FIRE  ·  P PAUSE  ·  M SOUND  ·  N MUSIC',
 };
+/** With the NAV CHIP the title row lines up with the map's edges: MAP on the left, the arrow and EXIT on the right. */
+const NAV_RIGHT = 806, TITLE_LEFT = 675;
 /** Reserve ships shown as icons before the top bar switches to "icon x N". */
 const MAX_SHIP_ICONS = 5;
 
@@ -98,6 +105,11 @@ export class Hud {
   /** The pause panel (RESUME and TITLE). Public for the tests. */
   readonly pauseMenu = new Container();
   private readonly pauseHint: Text;
+  /** VAULT MAP, and beside it (with the NAV CHIP) an arrow and EXIT, or HERE in the exit room. Public for the tests. */
+  readonly mapTitle: Text;
+  readonly navText: Text;
+  readonly navArrow = new Sprite();
+  private shownNav: string | undefined;
 
   constructor(clock: Clock, actions: HudActions) {
     this.root.scale.set(RENDER_SCALE / S);
@@ -125,7 +137,11 @@ export class Hud {
     this.soundToggle = text(W - 8, 10, 'SOUND OFF', TEXT.dim, 1, 0);
     this.soundZone = add(zone(W - 140, 0, 140, 36, () => cycleSound()));
 
-    text(740, BAR + 12, 'VAULT MAP', TEXT.dim, 0.5, 0);
+    this.mapTitle = text(740, BAR + 12, 'VAULT MAP', TEXT.dim, 0.5, 0);
+    this.navText = text(NAV_RIGHT, BAR + 12, '', TEXT.amber, 1, 0);
+    this.navArrow.anchor.set(1, 0.5);
+    this.navArrow.y = BAR + 19;
+    add(this.navArrow);
     add(this.mapCells);
     this.currentCell.rect(0, 0, MAP.cell - 2, MAP.cell - 2).stroke({ width: 2, color: COLORS.mapCurrent, alignment: 0.5 });
     add(this.currentCell);
@@ -203,6 +219,7 @@ export class Hud {
     this.pauseMenu.eventMode = s.paused ? 'passive' : 'none';
     if (s.paused) set(this.pauseHint, PAUSE_HINTS[s.device]);
     this.drawMap(s.map);
+    this.drawNav(s);
 
     // Ships in reserve (not counting the one in play).
     if (s.lives !== this.shownLives) {
@@ -224,7 +241,7 @@ export class Hud {
       this.shownGear = gearKey;
       const has: Record<ItemKind, boolean> = {
         overcharge: s.overcharge > 0, splitter: s.mods.includes('splitter'), lance: s.mods.includes('lance'),
-        ricochet: s.mods.includes('ricochet'), shield: s.shielded, pod: false,
+        ricochet: s.mods.includes('ricochet'), shield: s.shielded, pod: false, nav: s.nav,
       };
       for (const item of GEAR) this.gear[item].alpha = has[item] ? 1 : 0.2;
       // Overcharge level: a pip per level under its icon.
@@ -253,6 +270,24 @@ export class Hud {
         set(row.count, `x${n}`, n ? TEXT.ink : TEXT.dim);
         set(row.value, n ? pts(n * TREASURE[kind].value) : '-', n ? TEXT.amber : TEXT.dim);
       }
+    }
+  }
+
+  /** Hidden until the NAV CHIP; then the title moves left and an arrow points toward the exit room. */
+  private drawNav(s: HudState) {
+    const key = s.nav ? String(s.exitDir) : 'off';
+    if (key === this.shownNav) return;
+    this.shownNav = key;
+    const here = s.exitDir === undefined;
+    // VAULT MAP, an arrow and EXIT don't fit across the sidebar, so the title shortens.
+    set(this.mapTitle, s.nav ? 'MAP' : 'VAULT MAP');
+    this.mapTitle.anchor.x = s.nav ? 0 : 0.5;
+    this.mapTitle.x = s.nav ? TITLE_LEFT : 740;
+    set(this.navText, s.nav ? (here ? 'HERE' : 'EXIT') : '');
+    this.navArrow.visible = s.nav && !here;
+    if (this.navArrow.visible) {
+      this.navArrow.texture = signTexture(s.exitDir!);
+      this.navArrow.x = NAV_RIGHT - this.navText.width - 3;
     }
   }
 

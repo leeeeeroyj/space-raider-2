@@ -25,7 +25,7 @@ stacked-sprite 3D look, items that upgrade your beam and your hold, and music co
 
 Space Raider is an original arcade game inspired by the mechanics of Taito's early-1980s arcade game *Space Dungeon*. Each run drops you into a vault of 6 × 6 rooms. Fight your way through, fill your hold with treasure, and reach the extraction pad before you run out of ships.
 
-- **A new vault every run.** Each vault is a randomly generated maze with extra loops. The exit is always the room farthest from the entrance, and a floor arrow in each room points toward it.
+- **A new vault every run.** Each vault is a randomly generated maze with extra loops. The exit is always the room farthest from the entrance. Find a NAV CHIP and an arrow by the vault map points toward it for the rest of the game.
 - **Twin-stick shooting with a continuous beam.** Move with one stick and aim with the other, in any direction.
 - **A 3D look from flat pixel art.** Every hostile, treasure and crate is a stack of slices baked from its 16 × 16 sprite, so saucers spin, sentries turn to face you and coins flip. The walls are chunky voxel blocks drawn in code.
 - **Items.** Crates hold beam upgrades, a shield and cargo pods that let you carry more.
@@ -37,7 +37,7 @@ Space Raider is an original arcade game inspired by the mechanics of Taito's ear
 
 Fly from room to room through the doorways. The **vault map** shows which rooms still hold loot, which still have hostiles, and which you've cleared.
 
-- **Treasure only scores once you bank it.** Pick it up, carry it to the **extraction pad**, and land on it to cash in. The pad takes you to the next, harder vault.
+- **Treasure only scores once you bank it.** Pick it up, carry it to the **extraction pad** (marked `>> EXIT VAULT <<`), and land on it to cash in. The pad takes you to the next, harder vault.
 - **Your hold starts with 4 slots.** When it's full, treasure stays on the floor. While the vault still has more treasure than you can carry, clearing a room with a full hold drops a cargo pod, and so does walking into a quiet room with treasure in it, so you can always take everything.
 - **Crates glow cyan or magenta** (never gold, which is treasure), with what's inside floating over them. There are 2 or 3 in each vault, often guarded by a warden, and every brood pod leaves one.
 - **Losing a ship costs an Overcharge level and your newest mod.** Cargo pods are kept.
@@ -62,14 +62,15 @@ Fly from room to room through the doorways. The **vault map** shows which rooms 
 | Ricochet | The beam bounces once off a wall. |
 | Shield | Takes one hit for you. |
 | Cargo pod | Two more slots in your hold. |
+| Nav chip | An arrow by the vault map points toward the exit room. Kept for the rest of the game. |
 
 | Hostile | Points | Behaviour |
 | --- | ---: | --- |
 | Hunter drone | 100 | Streams in through the doorways and chases you. |
-| Sentry | 25 | A corner turret that flashes before it fires. |
-| Drift mine | 25 | Moves in straight diagonal lines and bounces off the walls. |
-| Warden | 125 | Tough, and guards the loot in its room. |
-| Brood pod | 500 | Keeps hatching drones, up to three at a time, until you destroy it. |
+| Sentry | 25 | A corner turret that flashes before it fires a bolt straight at you. |
+| Drift mine | 25 | Moves in straight diagonal lines and bounces off the walls. Destroyed, it bursts into four shards along its diagonals. |
+| Warden | 125 | Tough, and guards the loot in its room. Lobs mortar shells at you when you come close: a red ring marks where each will land. |
+| Brood pod | 500 | Keeps hatching drones, up to three at a time, until you destroy it. Flashes, then spits slow spores that steer after you. |
 | Scavenger | 50 | Can't be killed. It steals your best cargo; shoot it to make it drop the loot, or it hides the loot in another room. |
 
 ## Controls
@@ -123,7 +124,8 @@ tools/cdp.mjs        headless Chrome harness for the tests
 tools/pause-hi-test.mjs  checks pause and the high score
 tools/attract-test.mjs   checks the ?attract demo
 tools/touch-test.mjs     checks the touch sticks and tap to retry
-tools/items-test.mjs     checks the hold, crates, mods, the shield and losses on death
+tools/items-test.mjs     checks the hold, crates, mods, the nav chip, the shield and losses on death
+tools/shots-test.mjs     checks what hostiles fire: bolts, mortar shells, spores and shrapnel
 tools/music-test.mjs     checks the songs, the combat layer, timing and the music toggles
 ```
 

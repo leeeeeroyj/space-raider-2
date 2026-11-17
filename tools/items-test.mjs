@@ -18,7 +18,7 @@ await until(() => evaluate(`${S}?.name === 'room' && !!${S}.vault`), 5000);
 await sleep(800);
 // A quiet room: nothing hostile, and nothing can hurt the ship unless a test says so.
 const quiet = `(() => { const s = ${S}; s.invulnerableUntil = s.clock.now + 1e9; s.nextSpawnAt = 1e12; s.room.hunters = 0;
-  for (const e of [...s.enemies]) s.removeEnemy(e); s.room.foes.length = 0; })()`;
+  s.clearHostiles(); s.room.foes.length = 0; })()`;
 await evaluate(quiet);
 const drop = (code) => evaluate(`(() => { const s = ${S}, p = s.player; ${code} })()`);
 
@@ -49,6 +49,19 @@ await sleep(300);
 check('a Lance crate gives the Lance', await evaluate(`${S}.mods.includes('lance')`));
 check('the HUD lights the Lance icon', (await evaluate(`${hud}.gear.lance.alpha`)) === 1 && (await evaluate(`${hud}.gear.splitter.alpha`)) < 1);
 
+// No exit arrow on the floor any more, and none by the map until the NAV CHIP.
+check('no exit arrow on the floor', !(await evaluate(`${S}.roomFloor.children.some((c) => typeof c.text === 'string' && c.text.includes('EXIT'))`)));
+check('the map has no exit arrow before the NAV CHIP', (await evaluate(`${hud}.navText.text`)) === '' && !(await evaluate(`${hud}.navArrow.visible`)));
+await drop(`p.x += 40; const c = { x: p.x, y: p.y, item: 'nav' }; s.room.crates.push(c); s.placeCrate(c);`);
+await sleep(300);
+// Expected direction: from this room toward the exit room, in eighths of a turn clockwise from east.
+const want = await evaluate(`(() => { const s = ${S}, a = Math.atan2(s.vault.exit.row - s.room.row, s.vault.exit.col - s.room.col);
+  return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8; })()`);
+check('a NAV CHIP puts an arrow and EXIT by the map, pointing at the exit room',
+  (await evaluate(`${S}.navChip`)) && (await evaluate(`${hud}.navText.text`)) === 'EXIT' && (await evaluate(`${hud}.navArrow.visible`)) &&
+  (await evaluate(`${hud}.shownNav`)) === String(want), `want ${want}, shown ${await evaluate(`${hud}.shownNav`)}`);
+await shot('1c-nav');
+
 // Two sturdy hostiles in a row to the ship's right; aim right (at beam height) and fire.
 await drop(`for (const dx of [30, 60]) { const e = s.addEnemy('warden', p.x + dx, p.y); Object.assign(e, { fixed: true, hp: 1000, armedAt: 1e12 }); }`);
 const [px, py] = await evaluate(`[${S}.player.x, ${S}.player.y]`);
@@ -74,6 +87,7 @@ await sleep(100);
 check('losing a ship takes an Overcharge level and the newest mod',
   (await evaluate(`${S}.overcharge`)) === 1 && (await evaluate(`${S}.mods.join()`)) === 'lance');
 check('cargo pods are kept', (await evaluate(`${S}.slots`)) === 6);
+check('the NAV CHIP is kept', (await evaluate(`${S}.navChip`)) && (await evaluate(`${hud}.navText.text`)) === 'EXIT');
 await until(() => evaluate(`!${S}.dead`), 5000);
 await sleep(200);
 check('the respawn banner says what went', (await evaluate(`${S}.subBanner.text`)).includes('SPLITTER'));
@@ -92,4 +106,11 @@ const podsIn = (loot) => evaluate(`(() => { const s = ${S}; s.slots = 4; s.cargo
 check('a full hold finds a pod in a quiet room with treasure', (await podsIn(`[{ kind: 't2_chip', x: 200, y: 120 }]`)) === 1);
 await evaluate(`(() => { for (const r of ${S}.vault.rooms) r.loot.length = 0; })()`);
 check('no pod when the hold already fits every treasure', (await podsIn('[]')) === 0);
+
+// The exit room: the pad says what it is, and the map says HERE.
+await evaluate(`(() => { const s = ${S}, exit = s.vault.exit; s.enterRoom(exit, Object.keys(exit.doors)[0]); s.nextSpawnAt = 1e12; s.clearHostiles(); })()`);
+await sleep(2600);
+check('the exit pad is labelled', await evaluate(`${S}.roomFloor.children.some((c) => c.text === '>> EXIT VAULT <<')`));
+check('the map says HERE in the exit room', (await evaluate(`${hud}.navText.text`)) === 'HERE' && !(await evaluate(`${hud}.navArrow.visible`)));
+await shot('4-exit');
 t.done();

@@ -74,6 +74,41 @@ export function signTexture(d: number) {
   });
 }
 
+/** A brood pod's spore: a green blob with a pale core. */
+export const sporeTexture = () =>
+  named('fx-spore', 7, 7, (ctx) => {
+    ctx.fillStyle = '#2f8a3a';
+    ctx.fillRect(1, 0, 5, 7);
+    ctx.fillRect(0, 1, 7, 5);
+    ctx.fillStyle = '#7df06a';
+    ctx.fillRect(1, 1, 5, 5);
+    ctx.fillStyle = '#e6ffd8';
+    ctx.fillRect(2, 2, 2, 2);
+  });
+
+/** A mine shard: an orange sliver, turned to its flight. */
+export const shardTexture = () =>
+  named('fx-shard', 4, 2, (ctx) => {
+    ctx.fillStyle = '#ff9a3d';
+    ctx.fillRect(0, 0, 4, 2);
+    ctx.fillStyle = '#fff3c4';
+    ctx.fillRect(2, 0, 2, 1);
+  });
+
+/** A warden's mortar shell: a hot red round with a white-hot core and a dark rim, so it reads on any floor. */
+export const shellTexture = () =>
+  named('fx-shell', 8, 8, (ctx) => {
+    ctx.fillStyle = '#2a0d14';
+    ctx.fillRect(2, 0, 4, 8);
+    ctx.fillRect(0, 2, 8, 4);
+    ctx.fillRect(1, 1, 6, 6);
+    ctx.fillStyle = hex(COLORS.danger);
+    ctx.fillRect(2, 1, 4, 6);
+    ctx.fillRect(1, 2, 6, 4);
+    ctx.fillStyle = '#ffd0c0';
+    ctx.fillRect(3, 3, 2, 2);
+  });
+
 /** A sentry's bolt: a red square with a white core. */
 export const boltTexture = () =>
   named('fx-bolt', 5, 5, (ctx) => {

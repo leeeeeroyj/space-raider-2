@@ -74,6 +74,20 @@ const ICONS: Record<ItemKind, string[]> = {
     '....#..#....',
     '.....##.....',
   ],
+  nav: [
+    '....####....',
+    '..##....##..',
+    '.#.....++.#.',
+    '.#....+++.#.',
+    '#....+++...#',
+    '#...+##+...#',
+    '#...##.....#',
+    '#..##......#',
+    '.#.#......#.',
+    '.#........#.',
+    '..##....##..',
+    '....####....',
+  ],
   pod: [
     '############',
     '#..........#',
@@ -92,7 +106,7 @@ const ICONS: Record<ItemKind, string[]> = {
 
 /** The colour that marks an item: cyan for the beam, magenta for the rest. */
 export const itemColor = (item: ItemKind) =>
-  item === 'shield' || item === 'pod' ? ITEMS.colors.other : ITEMS.colors.beam;
+  item === 'shield' || item === 'pod' || item === 'nav' ? ITEMS.colors.other : ITEMS.colors.beam;
 
 /** An item's icon, 12 × 12 in a 16 × 16 texture (native size in the HUD, a hologram over crates). */
 export function itemIcon(item: ItemKind): Texture {

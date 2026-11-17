@@ -43,6 +43,18 @@ export const SOUNDS = {
     wave: 'square', freq: 1500, slide: -4, sustain: 0.02, decay: 0.14, duty: 0.3, volume: 0.2, jitter: 120, echo: 0.15,
     layers: [{ wave: 'noise', freq: 5000, sustain: 0.01, decay: 0.05, volume: 0.12 }],
   },
+  mortar: {
+    wave: 'sine', freq: 180, slide: -1.5, sustain: 0.04, decay: 0.22, volume: 0.6, jitter: 80, reverb: 0.3,
+    layers: [{ wave: 'noise', freq: 900, sustain: 0.02, decay: 0.12, filter: [2500, 400], volume: 0.3 }],
+  },
+  spore: {
+    wave: 'sine', freq: 300, slide: 1.5, vibrato: [24, 0.4], sustain: 0.06, decay: 0.12, volume: 0.4, jitter: 200,
+    layers: [{ wave: 'noise', freq: 400, smooth: 0.15, sustain: 0.04, decay: 0.1, volume: 0.25 }],
+  },
+  shard: {
+    wave: 'noise', freq: 6000, steps: [0, -5, 0, -5], sustain: 0.06, decay: 0.08, filter: [8000, 2500], volume: 0.3, jitter: 150, echo: 0.2,
+    layers: [{ wave: 'square', freq: 1800, slide: -3, sustain: 0.03, decay: 0.08, duty: 0.25, volume: 0.1 }],
+  },
   hatch: {
     wave: 'sine', freq: 140, slide: 2, vibrato: [18, 0.3], sustain: 0.12, decay: 0.12, volume: 0.55, jitter: 150, reverb: 0.2,
     layers: [{ wave: 'noise', freq: 600, smooth: 0.2, sustain: 0.05, decay: 0.2, volume: 0.25 }],
