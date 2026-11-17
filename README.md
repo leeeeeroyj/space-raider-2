@@ -4,11 +4,10 @@
 
 **Blast the hostiles. Grab what glows. Get out alive.**
 
-A twin-stick vault raid across 36 rooms, with neon effects. It runs in the browser on desktop, gamepad or phone.
+A twin-stick vault raid across 36 rooms, in neon and pseudo-3D. It runs in the browser on desktop, gamepad or phone.
 
-This is the second version, rebuilt on PixiJS and in progress: next come a 3D-looking stacked-sprite style, items that
-upgrade your weapon and cargo hold, and generated music. The original is at
-[leeeeeroyj/space-raider](https://github.com/leeeeeroyj/space-raider).
+The second version of [Space Raider](https://github.com/leeeeeroyj/space-raider), rebuilt on PixiJS with a
+stacked-sprite 3D look, items that upgrade your beam and your hold, and music composed in code.
 
 ### [▶ Play it now](https://leeeeeroyj.github.io/space-raider-2/)
 
@@ -18,7 +17,7 @@ upgrade your weapon and cargo hold, and generated music. The original is at
 ![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Space Raider gameplay: the beam cuts through a hostile while a brood pod explodes and the floor grid warps](docs/screenshot.png)
+![Space Raider 2: an overcharged, split beam hits two hunter saucers while an item crate glows by the wall and gold loot turns on the floor](docs/screenshot.png)
 
 </div>
 
@@ -28,8 +27,10 @@ Space Raider is an original arcade game inspired by the mechanics of Taito's ear
 
 - **A new vault every run.** Each vault is a randomly generated maze with extra loops. The exit is always the room farthest from the entrance, and a floor arrow in each room points toward it.
 - **Twin-stick shooting with a continuous beam.** Move with one stick and aim with the other, in any direction.
+- **A 3D look from flat pixel art.** Every hostile, treasure and crate is a stack of slices baked from its 16 × 16 sprite, so saucers spin, sentries turn to face you and coins flip. The walls are drawn in code.
+- **Items.** Crates hold beam upgrades, a shield and cargo pods that let you carry more.
 - **Neon effects.** The floor grid warps around explosions, kills burst into sparks, and bright things glow. Big hits bend the lens and swing the colours.
-- **Sound with no audio files.** Every sound effect is generated in code, sfxr style, when the game loads.
+- **Sound and music with no audio files.** Every sound effect is generated in code when the game loads, and the music is a small tracker that follows the fight: drums and an arpeggio come in when hostiles show up.
 - **Plays anywhere.** Keyboard and mouse, an Xbox-style controller, or touch on a phone held sideways.
 
 ## How to play
@@ -37,6 +38,9 @@ Space Raider is an original arcade game inspired by the mechanics of Taito's ear
 Fly from room to room through the doorways. The **vault map** shows which rooms still hold loot, which still have hostiles, and which you've cleared.
 
 - **Treasure only scores once you bank it.** Pick it up, carry it to the **extraction pad**, and land on it to cash in. The pad takes you to the next, harder vault.
+- **Your hold takes 4 treasures.** When it's full, treasure stays on the floor until you bank or find a cargo pod.
+- **Crates glow cyan or magenta** (never gold, which is treasure), with what's inside floating over them. There are 2 or 3 in each vault, often guarded by a warden, and every brood pod leaves one.
+- **Losing a ship costs an Overcharge level and your newest mod.** Cargo pods are kept.
 - **When you lose a ship, your cargo drops where you died.** The room is marked with an ✕ on the map. You respawn at the vault entrance and can go back for it.
 - **Bonuses:** an extra ship every 10,000 points, and 10,000 more for visiting all 36 rooms before you leave.
 - **High score:** your best is kept in this browser and shown on the title and at game over.
@@ -49,6 +53,15 @@ Fly from room to room through the doorways. The **vault map** shows which rooms 
 | Star Shard | 2,000 |
 | Relic Crystal | 4,000 |
 | Ancient Idol | 8,000 |
+
+| Item | What it does |
+| --- | --- |
+| Overcharge | Beam damage × 1.5 a level, up to 3 levels, and a fatter beam. |
+| Splitter | Three rays, 12° apart, each doing 60%. |
+| Lance | The beam goes through hostiles and hurts every one on its line. |
+| Ricochet | The beam bounces once off a wall. |
+| Shield | Takes one hit for you. |
+| Cargo pod | Two more slots in your hold, up to 10. |
 
 | Hostile | Points | Behaviour |
 | --- | ---: | --- |
@@ -67,7 +80,8 @@ Fly from room to room through the doorways. The **vault map** shows which rooms 
 | Aim | Mouse | Right stick | Right circle |
 | Fire | Hold left click | Right stick or RT | Right circle |
 | Pause | P or Esc | Start or B | Tap **II** (top left, after the score) |
-| Sound on / off | M | Y | Tap **SOUND** (top right) |
+| Sound on / off | M | Y | Tap **SOUND** (top right): all, then sound effects only, then off |
+| Music on / off | N | Back | |
 
 While paused, P, Enter or Start resumes and Esc or B goes back to the title. The game also pauses itself if you switch away.
 
@@ -90,14 +104,16 @@ Every push to `main` builds the game and deploys it to GitHub Pages.
 ```
 src/
   main.ts            game setup
-  config.ts          tunables: speeds, points, colours, effect settings
+  config.ts          tunables: speeds, points, colours, items, the 3D look
   engine/            screens, clock (timers and tweens), collisions, input, textures, text
   screens/           title screen, game room and HUD
   room/              room geometry and the attract demo's pilot
-  vault.ts           vault generation (maze, loot, hostiles)
+  render/            stacked sprites, walls and item icons, all built in code
+  audio/             mixer (reverb, echo, limiter), sound renderer and the music tracker
+  vault.ts           vault generation (maze, loot, hostiles, crates)
   touch.ts           on-screen touch sticks
   effects.ts         warp grid, sparks, bloom, screen wobble
-  sfx.ts             procedural sound effects
+  sfx.ts             the sound effects, and the sound and music settings
   hi.ts              the high score, kept in localStorage
   attract.ts         the ?attract demo mode's settings
 assets/sprites/      the game's 16 × 16 sprites
@@ -107,11 +123,13 @@ tools/cdp.mjs        headless Chrome harness for the tests
 tools/pause-hi-test.mjs  checks pause and the high score
 tools/attract-test.mjs   checks the ?attract demo
 tools/touch-test.mjs     checks the touch sticks and tap to retry
+tools/items-test.mjs     checks the hold, crates, mods, the shield and losses on death
+tools/music-test.mjs     checks the songs, the combat layer, timing and the music toggles
 ```
 
 ## Credits
 
-- **Sprites:** from the CC0 [Angais/pixel-art-atlas-1.4m](https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m) collection of AI-generated pixel art, found with [Pixel Search](https://huggingface.co/spaces/cfahlgren1/pixel-search).
+- **Sprites:** the hostiles, treasure, ship and pad come from the CC0 [Angais/pixel-art-atlas-1.4m](https://huggingface.co/datasets/Angais/pixel-art-atlas-1.4m) collection of AI-generated pixel art, found with [Pixel Search](https://huggingface.co/spaces/cfahlgren1/pixel-search). The walls, crates and item icons are drawn in code.
 - **Font:** [Silkscreen](https://fonts.google.com/specimen/Silkscreen) by Jason Kottke (SIL Open Font License).
 - **Engine:** [PixiJS](https://pixijs.com/), with filters from [pixi-filters](https://github.com/pixijs/filters).
 - **Inspiration:** Taito's *Space Dungeon* arcade game. Space Raider is an original game and isn't affiliated with or endorsed by the original's rights holders.
