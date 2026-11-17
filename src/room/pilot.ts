@@ -75,13 +75,14 @@ export class Pilot {
 
   /** Where the pilot is heading in this room: loot, the extraction pad, or through the door toward its next room. */
   private goal(r: RoomScreen): { x: number; y: number } {
-    const p = r.player, room = r.room, vault = r.vault, cargo = r.cargo.length;
-    if (room.loot.length && cargo < 2) {
+    const p = r.player, room = r.room, vault = r.vault, cargo = r.cargo.length, full = cargo >= r.slots;
+    if (room.crates.length) return room.crates.reduce((a, b) => (dist(p.x, p.y, a.x, a.y) <= dist(p.x, p.y, b.x, b.y) ? a : b));
+    if (room.loot.length && !full) {
       return room.loot.reduce((a, b) => (dist(p.x, p.y, a.x, a.y) <= dist(p.x, p.y, b.x, b.y) ? a : b));
     }
     if (room === vault.exit && cargo) return CENTER;
     // Breadth-first through the doors: the first step toward the nearest room with loot, or the exit.
-    const want = (n: Room) => (cargo >= 2 ? n === vault.exit : n.loot.length > 0 || (n === vault.exit && cargo > 0));
+    const want = (n: Room) => (full ? n === vault.exit : n.loot.length > 0 || (n === vault.exit && cargo > 0));
     const first = new Map<Room, Side>([[room, 'top']]);
     const queue: Room[] = [room];
     let side: Side | undefined;

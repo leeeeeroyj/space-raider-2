@@ -1,4 +1,4 @@
-import { COLS, HUNTER, ROWS, tileCenter, type TreasureKind } from './config';
+import { COLS, HUNTER, ITEMS, ROWS, tileCenter, type ItemKind, type TreasureKind } from './config';
 import { Rng } from './engine/rng';
 
 /** The vault is GRID × GRID rooms. */
@@ -17,6 +17,8 @@ export interface Loot { kind: TreasureKind; x: number; y: number }
 /** Hostiles that live in a room at a fixed starting spot. Hunter drones are just a count: they come through doors. */
 export type FoeKind = 'sentry' | 'mine' | 'warden' | 'brood';
 export interface Foe { kind: FoeKind; x: number; y: number }
+/** An item crate. What's inside is decided the first time you see it, from what you can still use. */
+export interface Crate { x: number; y: number; item?: ItemKind }
 export interface Room {
   col: number;
   row: number;
@@ -27,6 +29,7 @@ export interface Room {
   hunters: number;
   /** Other hostiles still alive in the room. */
   foes: Foe[];
+  crates: Crate[];
   visited: boolean;
 }
 export interface Vault {
@@ -76,7 +79,7 @@ export function generateVault(level: number, seed: string): Vault {
   const rnd = new Rng(seed);
   const rooms: Room[] = [];
   for (let row = 0; row < GRID; row++) {
-    for (let col = 0; col < GRID; col++) rooms.push({ col, row, doors: {}, loot: [], hunters: 0, foes: [], visited: false });
+    for (let col = 0; col < GRID; col++) rooms.push({ col, row, doors: {}, loot: [], hunters: 0, foes: [], crates: [], visited: false });
   }
   const vault = { level, rooms } as Vault;
 
@@ -140,6 +143,7 @@ export function generateVault(level: number, seed: string): Vault {
     for (let c = 3; c <= COLS - 4; c++) if (Math.abs(c - 10) > 1 || Math.abs(r - 6) > 1) floor.push({ c, r });
   }
   const extra = level - 1;
+  const spare = new Map<Room, () => { x: number; y: number }>();
   for (const room of rooms) {
     if (room === vault.entrance) room.hunters = HUNTER.entranceRoom;
     else if (rnd.frac() < 0.15) room.hunters = 0;
@@ -154,6 +158,7 @@ export function generateVault(level: number, seed: string): Vault {
       const count = room === vault.entrance ? 2 : pickWeighted(rnd, LOOT_COUNT_ODDS.map((p, n): [number, number] => [n, p]));
       for (let i = 0; i < count; i++) room.loot.push({ kind: room === vault.entrance ? 't1_coin' : pickWeighted(rnd, TIER_ODDS), ...take() });
     }
+    spare.set(room, take);
     if (room === vault.entrance) continue; // a gentle start: just the two drones
 
     const odds = (p: number) => rnd.frac() < p + FOE_ODDS.perLevel * extra;
@@ -161,6 +166,14 @@ export function generateVault(level: number, seed: string): Vault {
     if (odds(FOE_ODDS.mine)) for (let i = rnd.between(1, 2) + Math.floor(extra / 2); i > 0; i--) room.foes.push({ kind: 'mine', ...take() });
     if (room.loot.length && odds(FOE_ODDS.warden)) room.foes.push({ kind: 'warden', ...take() });
     if (odds(FOE_ODDS.brood)) room.foes.push({ kind: 'brood', ...take() });
+  }
+
+  // Item crates, away from the entrance and the exit; wardens tend to guard them.
+  const options = rooms.filter((r) => r !== vault.entrance && r !== vault.exit);
+  for (let n = rnd.between(...ITEMS.perVault); n > 0 && options.length; n--) {
+    const room = pickWeighted(rnd, options.map((r): [Room, number] => [r, r.foes.some((f) => f.kind === 'warden') ? ITEMS.wardenRoom : 1]).map(([r, w], _, all) => [r, w / all.reduce((s, [, x]) => s + x, 0)]));
+    options.splice(options.indexOf(room), 1);
+    room.crates.push(spare.get(room)!());
   }
   return vault;
 }

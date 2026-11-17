@@ -41,6 +41,9 @@ export const SOUNDS = {
   bank: { wave: 'square', freq: 523.25, steps: [0, 4, 7, 12, 16, 19, 24], sustain: 0.7, decay: 0.3, duty: 0.25, volume: 0.3 },
   extraShip: { wave: 'triangle', freq: 523.25, steps: [0, 4, 7, 12, 7, 12], sustain: 0.6, decay: 0.15, volume: 0.5 },
   gameOver: { wave: 'square', freq: 392, steps: [0, -2, -4, -5, -7, -12], sustain: 1.1, decay: 0.4, duty: 0.5, volume: 0.25 },
+  powerup: { wave: 'square', freq: 523.25, steps: [0, 7, 12, 19, 24], sustain: 0.35, decay: 0.15, duty: 0.25, volume: 0.3 },
+  holdFull: { wave: 'square', freq: 196, steps: [0, -1], sustain: 0.12, decay: 0.06, duty: 0.5, volume: 0.22 },
+  shieldHit: { wave: 'triangle', freq: 1320, slide: -1.5, vibrato: [40, 0.2], sustain: 0.18, decay: 0.25, volume: 0.45 },
   select: { wave: 'square', freq: 880, sustain: 0.04, decay: 0.04, duty: 0.5, volume: 0.2 },
   start: { wave: 'square', freq: 440, steps: [0, 7, 12, 19], sustain: 0.28, decay: 0.1, duty: 0.25, volume: 0.3 },
 } satisfies Record<string, Voice>;

@@ -1,5 +1,5 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js';
-import { STACK, type StackMode } from '../config';
+import { ITEMS, STACK, type StackMode } from '../config';
 import { tex } from '../engine/textures';
 
 /**
@@ -149,6 +149,35 @@ function cut(key: string, mode: StackMode) {
   return { images, shade: images.map((_, i) => 0.75 + (0.25 * i) / Math.max(1, n - 1)) };
 }
 
+/**
+ * An item crate, built in code: a dark box with lit edges and a glowing band round the middle, in `color`.
+ * Slices bottom to top.
+ */
+function crate(color: number) {
+  const W = 12, n = 9;
+  const rgb = [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+  const mixed = (t: number) => rgb.map((v, i) => Math.round(v * t + [18, 22, 44][i] * (1 - t)));
+  const images = [];
+  for (let i = 0; i < n; i++) {
+    const img = new ImageData(W, W), white = new ImageData(W, W);
+    const lid = i === n - 1, band = i === 4, rim = i === 0 || lid;
+    for (let y = 0; y < W; y++) {
+      for (let x = 0; x < W; x++) {
+        const edge = x === 0 || y === 0 || x === W - 1 || y === W - 1;
+        const corner = (x === 0 || x === W - 1) && (y === 0 || y === W - 1);
+        let c: number[];
+        if (band) c = edge ? mixed(1) : mixed(0.25);
+        else if (lid) c = edge ? mixed(0.9) : (x + y) % 4 === 0 ? mixed(0.3) : mixed(0.12);
+        else c = corner || (rim && edge) ? mixed(0.7) : edge ? mixed(0.18) : mixed(0.1);
+        img.data.set([...c, 255], (y * W + x) * 4);
+        white.data.set([255, 255, 255, 255], (y * W + x) * 4);
+      }
+    }
+    images.push({ img, white });
+  }
+  return { images, shade: images.map((_, i) => 0.7 + (0.3 * i) / (n - 1)) };
+}
+
 /** A hard-edged dark oval for under things. */
 function shadow(r: number) {
   const w = r * 2, h = Math.max(3, Math.round(r * 1.1));
@@ -169,8 +198,13 @@ export function bakeStacks() {
   const frame = (cell: { x: number; y: number; img: ImageData }) => () =>
     new Texture({ source: atlas.source, frame: new Rectangle(cell.x, cell.y, cell.img.width, cell.img.height) });
 
-  for (const [key, mode] of Object.entries(STACK.models) as Array<[string, StackMode]>) {
-    const { images, shade } = cut(key, mode);
+  const sources: Array<[string, () => ReturnType<typeof cut>]> = [
+    ...(Object.entries(STACK.models) as Array<[string, StackMode]>).map(([key, mode]): [string, () => ReturnType<typeof cut>] => [key, () => cut(key, mode)]),
+    ['crate-beam', () => crate(ITEMS.colors.beam)],
+    ['crate-other', () => crate(ITEMS.colors.other)],
+  ];
+  for (const [key, make] of sources) {
+    const { images, shade } = make();
     // Flat models repeat one slice: pack it once.
     const packed = new Map<object, { tex: () => Texture; white: () => Texture }>();
     const parts = images.map((s) => {

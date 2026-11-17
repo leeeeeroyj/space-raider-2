@@ -1,9 +1,10 @@
 import { Container, Graphics, Sprite, type Text } from 'pixi.js';
-import { COLORS, HEIGHT, HUD_H, HUD_SCALE, RENDER_SCALE, ROOM_H, ROOM_W, TEXT, TREASURE, WIDTH, type TreasureKind } from '../config';
+import { CARGO, COLORS, HEIGHT, HUD_H, HUD_SCALE, ITEMS, RENDER_SCALE, ROOM_H, ROOM_W, TEXT, TREASURE, WIDTH, type BeamMod, type ItemKind, type TreasureKind } from '../config';
 import type { Clock } from '../engine/clock';
 import type { Device } from '../engine/input';
 import { label, setText as set, zone } from '../engine/text';
 import { tex } from '../engine/textures';
+import { itemIcon } from '../render/icons';
 import { isMuted, toggleMute } from '../sfx';
 import { GRID, type MapCell } from '../vault';
 
@@ -11,6 +12,11 @@ export interface HudState {
   score: number;
   lives: number;
   cargo: TreasureKind[];
+  /** How many treasures the hold takes. */
+  slots: number;
+  overcharge: number;
+  mods: BeamMod[];
+  shielded: boolean;
   device: Device;
   level: number;
   /** Hostiles left in the current room. */
@@ -42,7 +48,11 @@ const MAP_BOTTOM = MAP.y + GRID * (MAP.cell + MAP.gap) - MAP.gap;
 const LEGEND: Array<[MapCell, string]> = [['loot', 'LOOT'], ['clear', 'CLEAR'], ['hostile', 'ENEMY'], ['unvisited', 'UNSEEN']];
 const PANEL = { x: 660, right: 820, y: MAP_BOTTOM + 52 };
 const TIERS = Object.keys(TREASURE) as TreasureKind[];
-const ROW_H = 24;
+const ROW_H = 20;
+/** The hold's slots, under the CARGO line; tier rows below them. */
+const SLOTS_Y = PANEL.y + 30, ROWS_Y = PANEL.y + 44;
+/** What the beam has, in a row under the tiers. */
+const GEAR: ItemKind[] = ['overcharge', 'splitter', 'lance', 'ricochet', 'shield'];
 /** Pause on touch: two bars between the score and SHIPS, with a thumb-sized tap zone. */
 const PAUSE = { x: 178, y: 11 };
 const PAUSE_HINTS: Record<Device, string> = { kbm: 'P OR ENTER RESUME  ·  ESC TITLE', pad: 'START OR A RESUME  ·  B TITLE', touch: 'TAP RESUME' };
@@ -75,6 +85,10 @@ export class Hud {
   private readonly shipIcons = new Container();
   private shownLives = -1;
   private shownCargo: string | undefined;
+  private shownGear: string | undefined;
+  private readonly slotPips = new Graphics();
+  private readonly gear: Record<string, Sprite> = {};
+  private readonly overchargePips = new Graphics();
   private readonly pauseBars: Graphics;
   private readonly pauseTap: Container;
   /** The pause panel (RESUME and TITLE). Public for the tests. */
@@ -124,7 +138,7 @@ export class Hud {
     g.rect(PANEL.x, PANEL.y + 22, PANEL.right - PANEL.x, 2).fill(COLORS.line);
     this.tiers = Object.fromEntries(
       TIERS.map((kind, i) => {
-        const y = PANEL.y + 32 + i * ROW_H;
+        const y = ROWS_Y + i * ROW_H;
         const icon = add(new Sprite(tex[kind]));
         icon.anchor.set(0.5);
         icon.position.set(PANEL.x + 8, y + 8);
@@ -132,8 +146,15 @@ export class Hud {
       }),
     ) as Record<TreasureKind, TierRow>;
 
-    const below = PANEL.y + 32 + TIERS.length * ROW_H + 8;
-    this.hostiles = text(PANEL.x, below, '');
+    add(this.slotPips);
+    const gearY = ROWS_Y + TIERS.length * ROW_H + 2;
+    GEAR.forEach((item, i) => {
+      const icon = add(new Sprite(itemIcon(item)));
+      icon.position.set(PANEL.x + i * 34, gearY);
+      this.gear[item] = icon;
+    });
+    add(this.overchargePips);
+    this.hostiles = text(PANEL.x, gearY + 26, '');
     this.hint = text(RW / 2, RB + 2, '', TEXT.dim, 0.5, 0);
 
     // And no P key: on touch, II after the score pauses.
@@ -195,10 +216,31 @@ export class Hud {
       set(this.shipCount, reserve > MAX_SHIP_ICONS ? `x${reserve}` : '');
     }
 
-    const cargoKey = s.cargo.join();
+    const gearKey = `${s.overcharge}|${s.mods.join()}|${s.shielded}`;
+    if (gearKey !== this.shownGear) {
+      this.shownGear = gearKey;
+      const has: Record<ItemKind, boolean> = {
+        overcharge: s.overcharge > 0, splitter: s.mods.includes('splitter'), lance: s.mods.includes('lance'),
+        ricochet: s.mods.includes('ricochet'), shield: s.shielded, pod: false,
+      };
+      for (const item of GEAR) this.gear[item].alpha = has[item] ? 1 : 0.2;
+      // Overcharge level: a pip per level under its icon.
+      const o = this.gear.overcharge, pips = this.overchargePips.clear();
+      for (let i = 0; i < ITEMS.overcharge.max; i++) pips.rect(o.x + 1 + i * 5, o.y + 18, 4, 3).fill(i < s.overcharge ? ITEMS.colors.beam : COLORS.line);
+    }
+
+    const cargoKey = `${s.cargo.join()}|${s.slots}`;
     if (cargoKey !== this.shownCargo) {
       this.shownCargo = cargoKey;
-      set(this.cargoTotal, s.cargo.length ? pts(total) : 'EMPTY');
+      set(this.cargoTotal, s.cargo.length >= s.slots ? `FULL ${pts(total)}` : s.cargo.length ? pts(total) : 'EMPTY', s.cargo.length >= s.slots ? TEXT.danger : TEXT.amber);
+      // Filled, open and not-yet-unlocked slots.
+      const g = this.slotPips.clear();
+      for (let i = 0; i < CARGO.max; i++) {
+        const x = PANEL.x + i * 16;
+        if (i < s.cargo.length) g.rect(x, SLOTS_Y, 14, 8).fill(COLORS.loot);
+        else if (i < s.slots) g.rect(x + 1, SLOTS_Y + 1, 12, 6).stroke({ width: 2, color: COLORS.amber, alpha: 0.6 });
+        else g.rect(x + 5, SLOTS_Y + 3, 4, 2).fill(COLORS.line);
+      }
       for (const kind of TIERS) {
         const n = s.cargo.filter((k) => k === kind).length;
         const row = this.tiers[kind];

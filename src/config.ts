@@ -151,6 +151,35 @@ export const HUNTER = {
 export const SCORING = { explorerBonus: 10000, extraShipEvery: 10000 };
 export const BEAM = { damagePerSecond: 5, hitRadius: 7 };
 
+/** The hold: how many treasures you can carry. A cargo pod adds `perPod` slots, up to `max`. Pods are kept when you die. */
+export const CARGO = { start: 4, perPod: 2, max: 10 };
+
+export type ItemKind = 'overcharge' | 'splitter' | 'lance' | 'ricochet' | 'shield' | 'pod';
+/** Beam mods: you keep each until you lose a ship (the newest goes first). */
+export type BeamMod = 'splitter' | 'lance' | 'ricochet';
+
+/** Items, found in crates. */
+export const ITEMS = {
+  /** Beam damage × `damage` per level, up to `max` levels. */
+  overcharge: { name: 'OVERCHARGE', max: 3, damage: 1.5 },
+  /** Three rays, `spread` degrees apart, each doing `damage` of a full beam. */
+  splitter: { name: 'SPLITTER', spread: 12, damage: 0.6 },
+  /** The beam goes through hostiles, hurting every one on its line. */
+  lance: { name: 'LANCE' },
+  /** The beam bounces once off a wall. */
+  ricochet: { name: 'RICOCHET' },
+  /** Takes one hit for you, then gives you `graceMs` to get clear. */
+  shield: { name: 'SHIELD', graceMs: 1200 },
+  pod: { name: 'CARGO POD' },
+  /** How likely each item is in a crate, among those you can still use. */
+  weights: { overcharge: 3, splitter: 2, lance: 2, ricochet: 2, shield: 2, pod: 3 } as Record<ItemKind, number>,
+  /** Crates per vault, and how much likelier a room with a warden is to hold one. */
+  perVault: [2, 3] as [number, number],
+  wardenRoom: 3,
+  /** Crate colours: cyan for the beam, magenta for everything else. Never gold, which means treasure. */
+  colors: { beam: 0x5ef2ff, other: 0xff3df0 },
+};
+
 // The other hostiles. hp is in seconds of beam at damagePerSecond 5 (so hp 5 = one second of fire).
 export const SENTRY = { hp: 0.5, points: 25, fireEveryMs: 2600, telegraphMs: 450, boltSpeed: 75 };
 export const MINE = { hp: 0.5, points: 25, speed: 32 };
