@@ -1,11 +1,11 @@
 import { Container, Rectangle, Sprite, Texture } from 'pixi.js';
-import { STACK, TILE, type StackMode } from '../config';
+import { STACK, type StackMode } from '../config';
 import { tex } from '../engine/textures';
 
 /**
  * Sprite stacking: an object is a pile of horizontal slices, each drawn `STACK.step` pixels above the one under it.
- * Seen from above at an angle, the pile reads as a solid you can turn. Every slice (and the wall blocks and shadows)
- * is baked once into a single atlas, so a room draws in a few batches.
+ * Seen from above at an angle, the pile reads as a solid you can turn. Every slice 
+ * is baked once into a single atlas (with the shadows), so a room draws in a few batches.
  */
 
 interface Slice {
@@ -21,7 +21,6 @@ interface Model {
 }
 
 const models: Record<string, Model> = {};
-const blocks: Record<string, Texture> = {};
 const shadows: Record<number, Texture> = {};
 
 const SIZE = 16;
@@ -150,26 +149,6 @@ function cut(key: string, mode: StackMode) {
   return { images, shade: images.map((_, i) => 0.75 + (0.25 * i) / Math.max(1, n - 1)) };
 }
 
-/** A wall block: the tile's top face, with its front face (the same panel, squashed and shaded) `height` pixels tall. */
-function block(key: string, height: number) {
-  const c = document.createElement('canvas');
-  c.width = SIZE;
-  c.height = SIZE + height;
-  const ctx = c.getContext('2d', { willReadFrequently: true })!;
-  ctx.imageSmoothingEnabled = false;
-  const img = tex[key].source.resource as CanvasImageSource;
-  ctx.drawImage(img, 0, 0, SIZE, SIZE, 0, SIZE, SIZE, height);
-  ctx.globalCompositeOperation = 'source-atop';
-  ctx.fillStyle = 'rgba(4,5,14,0.55)';
-  ctx.fillRect(0, SIZE, SIZE, height);
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.drawImage(img, 0, 0);
-  // A lit edge where the top meets the front.
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
-  ctx.fillRect(1, SIZE - 1, SIZE - 2, 1);
-  return ctx.getImageData(0, 0, SIZE, SIZE + height);
-}
-
 /** A hard-edged dark oval for under things. */
 function shadow(r: number) {
   const w = r * 2, h = Math.max(3, Math.round(r * 1.1));
@@ -183,7 +162,7 @@ function shadow(r: number) {
   return img;
 }
 
-/** Bakes every model, wall block and shadow into the atlas. Call once, after the sprites load. */
+/** Bakes every model and shadow into the atlas. Call once, after the sprites load. */
 export function bakeStacks() {
   const packer = new Packer();
   const pending: Array<() => void> = [];
@@ -213,12 +192,6 @@ export function bakeStacks() {
       };
     });
   }
-  for (const key of ['wall', 'door']) {
-    for (const h of [STACK.wall, STACK.nearWall]) {
-      const make = frame(packer.add(block(key, h)));
-      pending.push(() => (blocks[`${key}-${h}`] = make()));
-    }
-  }
   for (const r of new Set(Object.values(STACK.shadow))) {
     const make = frame(packer.add(shadow(r)));
     pending.push(() => (shadows[r] = make()));
@@ -232,9 +205,6 @@ export function bakeStacks() {
   const atlas = Texture.from(canvas);
   for (const make of pending) make();
 }
-
-/** A wall or door block `height` pixels tall; its top-left goes `height` above the tile's top-left. */
-export const blockTexture = (key: 'wall' | 'door', height: number) => blocks[`${key}-${height}`];
 
 /** One stacked object. Its position is where it stands on the floor; the slices rise from there. */
 export class Stack extends Container {
@@ -300,12 +270,4 @@ export class Stack extends Container {
   get top() {
     return this.lift + (this.parts.length ? -this.parts[this.parts.length - 1].sprite.y * STACK.squash : 0);
   }
-}
-
-/** A wall block on the tile whose top-left is (x, y), as a sprite to sort in with everything else by its front edge. */
-export function wallBlock(key: 'wall' | 'door', x: number, y: number, height: number) {
-  const s = new Sprite(blockTexture(key, height));
-  s.position.set(x, y - height);
-  s.zIndex = y + TILE;
-  return s;
 }

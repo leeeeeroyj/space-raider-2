@@ -81,7 +81,7 @@ export const STACK = {
   /** Slices are seen at an angle, so their depth looks shorter: a disc reads as an oval. */
   squash: 0.6,
   beamZ: 6,
-  /** Wall blocks; the near (bottom) wall is kept low so it doesn't hide the floor. */
+  /** Wall height; the near (bottom) wall is kept low so it doesn't hide the floor. */
   wall: 10,
   nearWall: 4,
   /** How high fliers float above their shadow; the drone also bobs by `bob`. */
@@ -108,6 +108,17 @@ export const STACK = {
   } satisfies Record<string, StackMode>,
   /** Shadow radius under each kind, in design pixels. */
   shadow: { player: 6, hunter: 6, sentry: 6, mine: 5, brood: 7, warden: 7, scavenger: 5, loot: 4 } as Record<string, number>,
+};
+
+/** Wall colours (src/render/walls.ts). */
+export const WALL = {
+  top: 0x262c4a,
+  frameTop: 0x30293a,
+  faceTop: 0x232946,
+  faceBottom: 0x0b0e1c,
+  edge: 0x7f8bc4,
+  seam: 0x0a0c18,
+  trim: 0x46d8ff,
 };
 
 /** Spark colours when each kind blows up or takes damage. */

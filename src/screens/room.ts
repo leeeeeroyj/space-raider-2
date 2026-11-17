@@ -13,9 +13,10 @@ import { label, zone } from '../engine/text';
 import { Effects } from '../effects';
 import { addGlow, addTreasureGlow, startSparkles } from '../fx';
 import { loadHi, saveHi } from '../hi';
-import { boltTexture, CENTER, besideDoor, doorTiles, entryPoint, inDoor, insideInterior, isEdge, isWall, signTexture } from '../room/geometry';
+import { boltTexture, CENTER, doorTiles, entryPoint, inDoor, insideInterior, isEdge, isWall, signTexture } from '../room/geometry';
 import { Pilot } from '../room/pilot';
-import { Stack, wallBlock } from '../render/stack';
+import { Stack } from '../render/stack';
+import { buildWalls, drawWallShade } from '../render/walls';
 import { loopSound, playSound, toggleMute, type Loop } from '../sfx';
 import { touchSticks } from '../touch';
 import {
@@ -94,7 +95,7 @@ export class RoomScreen implements Screen {
   private readonly roomTop = new Container();
   /** Everything that stands up (walls, the ship, hostiles, loot, the pad, bolts), drawn back to front by floor y. */
   private readonly actors = new Container();
-  private wallBlocks: Sprite[] = [];
+  private wallPieces: Graphics[] = [];
   private readonly sparkleLayer = new Container();
   readonly banner: Text;
   readonly subBanner: Text;
@@ -395,8 +396,8 @@ export class RoomScreen implements Screen {
     // Whatever was on screen belonged to the last room: banners, floating text, debris.
     this.hideBanner();
     for (const layer of [this.roomFloor, this.roomTop]) for (const o of layer.removeChildren()) o.destroy({ children: true, context: true });
-    for (const o of [...this.wallBlocks, ...this.treasures.map((t) => t.view)]) o.destroy({ children: true });
-    this.wallBlocks = [];
+    for (const o of [...this.wallPieces, ...this.treasures.map((t) => t.view)]) o.destroy({ children: true, context: true });
+    this.wallPieces = [];
     this.fx.clear();
     this.clearHostiles();
     this.treasures = [];
@@ -483,14 +484,12 @@ export class RoomScreen implements Screen {
           else if (c === 0) glow.rect(x + 6, y - 8, 1, TILE);
           else glow.rect(x - 7, y - 8, 1, TILE);
           glow.fill(COLORS.amber);
-        } else {
-          // The near (bottom) wall is kept low so it doesn't hide the floor.
-          const height = r === ROWS - 1 ? STACK.nearWall : STACK.wall;
-          this.wallBlocks.push(this.actors.addChild(wallBlock(besideDoor(room, c, r) ? 'door' : 'wall', x - TILE / 2, y - TILE / 2, height)));
         }
       }
     }
-    this.roomFloor.addChild(glow);
+    this.roomFloor.addChild(drawWallShade(), glow);
+    this.wallPieces = buildWalls(room);
+    this.actors.addChild(...this.wallPieces);
     this.clock.tween(glow, { alpha: 0.4 }, { ms: 900, yoyo: true, repeat: -1 });
   }
 
