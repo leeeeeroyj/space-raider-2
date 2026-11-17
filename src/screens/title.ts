@@ -1,12 +1,12 @@
-import { Container, Graphics, Sprite, type Text } from 'pixi.js';
-import { AIM_MODE_SELECTABLE, COLORS, HEIGHT, RENDER_SCALE, TEXT, WIDTH, aimMode } from '../config';
+import { Container, Graphics, type Text } from 'pixi.js';
+import { AIM_MODE_SELECTABLE, COLORS, HEIGHT, RENDER_SCALE, STACK, TEXT, WIDTH, aimMode } from '../config';
 import { Clock } from '../engine/clock';
 import { input } from '../engine/input';
 import { nav, type Screen } from '../engine/screens';
 import { label, setText, zone } from '../engine/text';
-import { tex } from '../engine/textures';
 import { addTreasureGlow, startSparkles } from '../fx';
 import { loadHi } from '../hi';
+import { Stack } from '../render/stack';
 import { initAudio, playSound, toggleMute } from '../sfx';
 
 type Star = { x: number; y: number; speed: number; alpha: number };
@@ -28,6 +28,8 @@ export class TitleScreen implements Screen {
   /** The high score line, if there is one (the tests read it). */
   hiText: Text | undefined;
   private leaving = false;
+  /** The legend's models, turning slowly. */
+  private readonly turning: Stack[] = [];
 
   constructor() {
     initAudio();
@@ -44,10 +46,11 @@ export class TitleScreen implements Screen {
     const cx = WIDTH / 2;
     const text = (x: number, y: number, s: string, size: number, color: string) =>
       this.stage.addChild(label(s, x, y, size, color, { res: RENDER_SCALE, ax: 0.5, align: 'center' }));
-    const image = (key: string, x: number, y: number) => {
-      const s = new Sprite(tex[key]);
-      s.anchor.set(0.5);
-      s.position.set(x, y);
+    // The legend's models stand a little below the middle of the row, so they look centred on it.
+    const model = (key: string, x: number, y: number, turns = true) => {
+      const s = new Stack(key, STACK.shadow[key] ?? STACK.shadow.loot);
+      s.position.set(x, y + 5);
+      if (turns) this.turning.push(s);
       return s;
     };
 
@@ -59,19 +62,20 @@ export class TitleScreen implements Screen {
 
     // Legend: what you fly, what to collect, what to shoot.
     text(64, 64, 'YOU', 8, TEXT.dim);
-    this.stage.addChild(image('player', 64, 86));
+    // The ship never turns.
+    this.stage.addChild(model('player', 64, 86, false));
     text(196, 64, 'LOOT  500 TO 8,000', 8, TEXT.dim);
     const loot = LOOT.map((key, i) => {
       const c = new Container();
       c.position.set(156 + i * 20, 86);
-      c.addChild(image(key, 0, 0));
-      return this.stage.addChild(addTreasureGlow(this.clock, c));
+      c.addChild(model(key, 0, 0));
+      return this.stage.addChild(addTreasureGlow(this.clock, c, -2));
     });
     const sparkles = this.stage.addChild(new Container());
     startSparkles(this.clock, sparkles, () => loot);
     text(340, 64, 'HOSTILES', 8, TEXT.danger);
     HOSTILES.forEach((key, i) => {
-      const s = this.stage.addChild(image(key, 340 + (i - 2.5) * 18, 86));
+      const s = this.stage.addChild(model(key, 340 + (i - 2.5) * 18, 86));
       s.alpha = key === 'scavenger' ? 0.7 : 1;
     });
 
@@ -107,6 +111,8 @@ export class TitleScreen implements Screen {
   update(ms: number) {
     this.clock.update(ms);
     this.drawStars(ms / 1000);
+    const secs = this.clock.now / 1000;
+    this.turning.forEach((s, i) => (s.spin = secs * 0.15 * Math.PI * 2 + i * 0.7));
     const m = input().readMenu();
     if (m.mute) toggleMute();
     if (!this.leaving) {

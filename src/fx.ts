@@ -8,9 +8,10 @@ import { glowTexture, hex, named } from './engine/textures';
  * A pulsing glow behind `obj`'s sprite: a soft halo added to `obj` itself, so it moves and goes with it.
  * `size` is the halo's diameter in design pixels.
  */
-export function addGlow<T extends Container>(clock: Clock, obj: T, color: number, size = 26): T {
+export function addGlow<T extends Container>(clock: Clock, obj: T, color: number, size = 26, y = 0): T {
   const halo = new Sprite(glowTexture());
   halo.anchor.set(0.5);
+  halo.y = y;
   halo.tint = color;
   halo.blendMode = 'add';
   halo.width = halo.height = size;
@@ -21,7 +22,7 @@ export function addGlow<T extends Container>(clock: Clock, obj: T, color: number
 }
 
 /** Marks an object as loot with a gold glow, so treasure reads differently from hostiles. */
-export const addTreasureGlow = <T extends Container>(clock: Clock, obj: T) => addGlow(clock, obj, COLORS.loot);
+export const addTreasureGlow = <T extends Container>(clock: Clock, obj: T, y = 0) => addGlow(clock, obj, COLORS.loot, 26, y);
 
 /** Every `everyMs`, puts a short-lived glint in `layer` on one of the objects `targets()` returns. */
 export function startSparkles(clock: Clock, layer: Container, targets: () => Array<{ x: number; y: number }>, everyMs = 450) {

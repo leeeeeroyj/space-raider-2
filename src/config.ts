@@ -62,6 +62,54 @@ export const FX = {
   bloom: { enabled: true, threshold: 0.45, scale: 0.9, blur: 3, quality: 4 },
 };
 
+/** How each sprite is turned into a stack of slices (src/render/stack.ts). */
+export type StackMode =
+  /** Drawn from above: the sprite is the top, with `layers` darker copies under it. */
+  | { kind: 'flat'; layers: number }
+  /** Drawn from the front and round: each row is spun round the middle into a ring. */
+  | { kind: 'lathe' }
+  /** Drawn from the front: each row becomes a strip `depth` pixels deep, so the sprite is a thick cut-out. */
+  | { kind: 'card'; depth: number };
+
+/**
+ * The 3D look. Every object is a stack of horizontal slices drawn one above the other, `step` design pixels apart, so
+ * the camera seems to look down at an angle. Gameplay stays flat: things stand at their position and the beam flies
+ * `beamZ` pixels up, at hull height.
+ */
+export const STACK = {
+  step: 1,
+  /** Slices are seen at an angle, so their depth looks shorter: a disc reads as an oval. */
+  squash: 0.6,
+  beamZ: 6,
+  /** Wall blocks; the near (bottom) wall is kept low so it doesn't hide the floor. */
+  wall: 10,
+  nearWall: 4,
+  /** How high fliers float above their shadow; the drone also bobs by `bob`. */
+  hover: { player: 4, hunter: 3, scavenger: 3, mine: 1 } as Record<string, number>,
+  bob: 1,
+  /** Height of the middle of a hostile or a treasure: where explosions, sparkles and score numbers appear. */
+  mid: 7,
+  /** Turns a second: hunters and mines spin, loot turns to show it off. */
+  spin: { hunter: 3, mine: 1.2, loot: 1.6 },
+  models: {
+    player: { kind: 'flat', layers: 3 },
+    hunter: { kind: 'lathe' },
+    sentry: { kind: 'lathe' },
+    mine: { kind: 'lathe' },
+    brood: { kind: 'lathe' },
+    warden: { kind: 'card', depth: 3 },
+    scavenger: { kind: 'card', depth: 3 },
+    t1_coin: { kind: 'card', depth: 2 },
+    t2_chip: { kind: 'flat', layers: 2 },
+    t3_star: { kind: 'card', depth: 3 },
+    t4_crystal: { kind: 'card', depth: 4 },
+    t5_idol: { kind: 'card', depth: 4 },
+    exit: { kind: 'flat', layers: 2 },
+  } satisfies Record<string, StackMode>,
+  /** Shadow radius under each kind, in design pixels. */
+  shadow: { player: 6, hunter: 6, sentry: 6, mine: 5, brood: 7, warden: 7, scavenger: 5, loot: 4 } as Record<string, number>,
+};
+
 /** Spark colours when each kind blows up or takes damage. */
 export const HOSTILE_COLORS = {
   hunter: [0xff3d6e, 0xff9a3d],

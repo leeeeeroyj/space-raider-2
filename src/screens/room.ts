@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, type Text } from 'pixi.js';
 import {
   AIM_MODE_SELECTABLE, BEAM, BROOD, COLORS, COLS, HOSTILE_COLORS, HUD_H, HUNTER, INTERIOR, MINE, PLAYER, RENDER_SCALE, ROOM_H,
-  ROOM_W, ROWS, SCAVENGER, SCORING, SENTRY, TEXT, TILE, TREASURE, WARDEN, aimMode, tileCenter, type TreasureKind,
+  ROOM_W, ROWS, SCAVENGER, SCORING, SENTRY, STACK, TEXT, TILE, TREASURE, WARDEN, aimMode, tileCenter, type TreasureKind,
 } from '../config';
 import { DEMO_SECS } from '../attract';
 import { Clock, EASE, type Handle } from '../engine/clock';
@@ -10,12 +10,12 @@ import { input, type ControlState } from '../engine/input';
 import { clamp, dist, rand } from '../engine/rng';
 import { nav, type Screen } from '../engine/screens';
 import { label, zone } from '../engine/text';
-import { tex } from '../engine/textures';
 import { Effects } from '../effects';
 import { addGlow, addTreasureGlow, startSparkles } from '../fx';
 import { loadHi, saveHi } from '../hi';
 import { boltTexture, CENTER, besideDoor, doorTiles, entryPoint, inDoor, insideInterior, isEdge, isWall, signTexture } from '../room/geometry';
 import { Pilot } from '../room/pilot';
+import { Stack, wallBlock } from '../render/stack';
 import { loopSound, playSound, toggleMute, type Loop } from '../sfx';
 import { touchSticks } from '../touch';
 import {
@@ -28,7 +28,7 @@ type EnemyKind = 'hunter' | FoeKind;
 
 export interface Enemy extends Body {
   kind: EnemyKind | 'scavenger';
-  view: Sprite;
+  view: Stack;
   hp: number;
   /** Harmless until then: it's still fading in. */
   armedAt: number;
@@ -62,7 +62,7 @@ interface Treasure {
   x: number;
   y: number;
   r: number;
-  view: Container;
+  view: Stack;
 }
 
 const pts = (n: number) => n.toLocaleString('en-US');
@@ -71,7 +71,7 @@ const ENEMY_POINTS: Record<EnemyKind, number> = {
   hunter: HUNTER.points, sentry: SENTRY.points, mine: MINE.points, warden: WARDEN.points, brood: BROOD.points,
 };
 /** Draw order inside the room. */
-const Z = { floor: 0, grid: 0.5, floorFx: 1, pad: 3, treasure: 4, enemy: 8, bolt: 9, player: 10, beam: 12, fx: 20, sparkle: 30, text: 140, banner: 150, crosshair: 200, fade: 1000 };
+const Z = { floor: 0, grid: 0.5, floorFx: 1, actors: 8, beam: 12, fx: 20, sparkle: 30, text: 140, banner: 150, crosshair: 200, fade: 1000 };
 
 export class RoomScreen implements Screen {
   readonly name = 'room';
@@ -92,19 +92,21 @@ export class RoomScreen implements Screen {
   /** Things for the current room only, cleared on the way out: walls, signpost, floating text, debris. */
   private readonly roomFloor = new Container();
   private readonly roomTop = new Container();
-  private readonly treasureLayer = new Container();
+  /** Everything that stands up (walls, the ship, hostiles, loot, the pad, bolts), drawn back to front by floor y. */
+  private readonly actors = new Container();
+  private wallBlocks: Sprite[] = [];
   private readonly sparkleLayer = new Container();
   readonly banner: Text;
   readonly subBanner: Text;
   private bannerFade: Handle | undefined;
   private readonly listeners: Array<() => void> = [];
 
-  readonly player: Body & { view: Sprite; visible: boolean };
+  readonly player: Body & { view: Stack; visible: boolean };
   enemies: Enemy[] = [];
   scavenger: Enemy | undefined;
   bolts: Bolt[] = [];
   private treasures: Treasure[] = [];
-  private pad: (Body & { view: Container }) | undefined;
+  private pad: (Body & { view: Stack }) | undefined;
   private walls: boolean[][] = [];
   /** The hostile the beam is flashing white, so it can be put back when the beam moves off. */
   flashed: Enemy | undefined;
@@ -155,7 +157,8 @@ export class RoomScreen implements Screen {
     at(this.drawFloor(), Z.floor);
     at(this.fx.floor, Z.grid);
     at(this.roomFloor, Z.floorFx);
-    at(this.treasureLayer, Z.treasure);
+    this.actors.sortableChildren = true;
+    at(this.actors, Z.actors);
     at(this.fx.top, Z.fx);
     at(this.sparkleLayer, Z.sparkle);
     at(this.roomTop, Z.text);
@@ -166,8 +169,7 @@ export class RoomScreen implements Screen {
     this.banner = at(label('', mid.x, mid.y - 48, 16, TEXT.amber, { res: RENDER_SCALE, ax: 0.5, ay: 0.5 }), Z.banner);
     this.subBanner = at(label('', mid.x, mid.y - 36, 8, TEXT.ink, { res: RENDER_SCALE, ax: 0.5, align: 'center', lineSpacing: 4 }), Z.banner);
 
-    const view = at(new Sprite(tex.player), Z.player);
-    view.anchor.set(0.5);
+    const view = this.actors.addChild(new Stack('player', STACK.shadow.player));
     this.player = { x: CENTER.x, y: CENTER.y, vx: 0, vy: 0, r: PLAYER.radius, view, visible: true };
 
     this.hud = new Hud(this.clock, { pause: (on) => this.setPaused(on), toTitle: () => this.toTitle() });
@@ -182,7 +184,7 @@ export class RoomScreen implements Screen {
       document.addEventListener('visibilitychange', hidden);
       this.listeners.push(() => document.removeEventListener('visibilitychange', hidden));
     }
-    startSparkles(this.clock, this.sparkleLayer, () => this.treasures.map((t) => t.view));
+    startSparkles(this.clock, this.sparkleLayer, () => this.treasures.map((t) => ({ x: t.x, y: t.y - STACK.mid })));
     this.clock.every(HUNTER.spawnEveryMs / 3, () => this.spawnHunter());
     this.startVault(demo ? 1 + (attract % 3) : 1);
   }
@@ -211,7 +213,8 @@ export class RoomScreen implements Screen {
   update(ms: number) {
     const dt = ms / 1000;
     const demo = this.demoSeed >= 0;
-    const controls = demo ? this.pilot.steer(this, dt) : input().read(this.player);
+    // Mouse aim starts from beam height, so the beam (drawn that high) runs through the crosshair.
+    const controls = demo ? this.pilot.steer(this, dt) : input().read({ x: this.player.x, y: this.player.y - STACK.beamZ });
     this.device = controls.device;
     if (demo && !this.demoOver && (this.over || (this.demoClock += dt) > DEMO_SECS)) {
       // Attract mode: the next demo, from the next seed.
@@ -357,11 +360,26 @@ export class RoomScreen implements Screen {
   /** Puts every sprite where its body is. */
   private syncViews() {
     const p = this.player;
-    p.view.position.set(p.x, p.y);
+    const secs = this.clock.now / 1000, turn = Math.PI * 2;
+    const place = (o: Container, x: number, y: number) => {
+      o.position.set(x, y);
+      o.zIndex = y;
+    };
+    place(p.view, p.x, p.y);
+    p.view.zIndex += 0.5;
     p.view.visible = p.visible;
-    for (const e of this.enemies) e.view.position.set(e.x, e.y);
-    if (this.scavenger) this.scavenger.view.position.set(this.scavenger.x, this.scavenger.y);
-    for (const b of this.bolts) b.view.position.set(b.x, b.y);
+    p.view.lift = STACK.hover.player + Math.sin(secs * 3) * STACK.bob;
+    for (const e of this.enemies) {
+      place(e.view, e.x, e.y);
+      if (e.kind === 'hunter' || e.kind === 'mine') e.view.spin = secs * STACK.spin[e.kind] * turn;
+      else if (e.kind === 'sentry') e.view.spin = Math.atan2(p.y - e.y, p.x - e.x) - Math.PI / 2;
+    }
+    if (this.scavenger) place(this.scavenger.view, this.scavenger.x, this.scavenger.y);
+    for (const b of this.bolts) place(b.view, b.x, b.y);
+    for (const t of this.treasures) {
+      t.view.zIndex = t.y;
+      t.view.spin = secs * STACK.spin.loot * turn + t.x;
+    }
   }
 
   // ---- Vault and rooms ----
@@ -376,7 +394,9 @@ export class RoomScreen implements Screen {
   private enterRoom(room: Room, from?: Side) {
     // Whatever was on screen belonged to the last room: banners, floating text, debris.
     this.hideBanner();
-    for (const layer of [this.roomFloor, this.roomTop, this.treasureLayer]) for (const o of layer.removeChildren()) o.destroy({ children: true, context: true });
+    for (const layer of [this.roomFloor, this.roomTop]) for (const o of layer.removeChildren()) o.destroy({ children: true, context: true });
+    for (const o of [...this.wallBlocks, ...this.treasures.map((t) => t.view)]) o.destroy({ children: true });
+    this.wallBlocks = [];
     this.fx.clear();
     this.clearHostiles();
     this.treasures = [];
@@ -392,13 +412,12 @@ export class RoomScreen implements Screen {
     if (from) playSound('door');
     for (const loot of room.loot) this.placeTreasure(loot);
     if (room === this.vault.exit) {
-      const view = new Container();
+      const view = new Stack('exit');
       view.position.set(CENTER.x, CENTER.y);
-      view.zIndex = Z.pad;
-      const s = view.addChild(new Sprite(tex.exit));
-      s.anchor.set(0.5);
+      // Under anything standing on it.
+      view.zIndex = CENTER.y - TILE;
       addGlow(this.clock, view, COLORS.beam);
-      this.world.addChild(view);
+      this.actors.addChild(view);
       this.pad = { x: CENTER.x, y: CENTER.y, vx: 0, vy: 0, r: 4, view };
       this.showBanner('EXTRACTION', 'FLY ONTO THE PAD TO BANK YOUR CARGO\nAND LEAVE THE VAULT', 2200);
     }
@@ -453,7 +472,6 @@ export class RoomScreen implements Screen {
   private buildWalls(room: Room) {
     this.walls = Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => isWall(room, c, r)));
     const glow = new Graphics();
-    const walls = new Container();
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         if (!isEdge(c, r)) continue;
@@ -466,13 +484,13 @@ export class RoomScreen implements Screen {
           else glow.rect(x - 7, y - 8, 1, TILE);
           glow.fill(COLORS.amber);
         } else {
-          const s = walls.addChild(new Sprite(besideDoor(room, c, r) ? tex.door : tex.wall));
-          s.anchor.set(0.5);
-          s.position.set(x, y);
+          // The near (bottom) wall is kept low so it doesn't hide the floor.
+          const height = r === ROWS - 1 ? STACK.nearWall : STACK.wall;
+          this.wallBlocks.push(this.actors.addChild(wallBlock(besideDoor(room, c, r) ? 'door' : 'wall', x - TILE / 2, y - TILE / 2, height)));
         }
       }
     }
-    this.roomFloor.addChild(glow, walls);
+    this.roomFloor.addChild(glow);
     this.clock.tween(glow, { alpha: 0.4 }, { ms: 900, yoyo: true, repeat: -1 });
   }
 
@@ -509,13 +527,13 @@ export class RoomScreen implements Screen {
     this.beamHum(false);
     playSound('die');
     const p = this.player;
-    this.fx.burst(p.x, p.y, [COLORS.amber, COLORS.beam, 0xff3df0], 'huge');
+    this.fx.burst(p.x, p.y - STACK.mid, [COLORS.amber, COLORS.beam, 0xff3df0], 'huge');
     this.fade(0xff466e, 140);
     p.vx = p.vy = 0;
     p.visible = false;
     this.dropCargo(p.x, p.y);
     // Drones on screen blow up with you but aren't killed: they stay in the room's count.
-    for (const e of this.enemies) if (e.kind === 'hunter') this.fx.burst(e.x, e.y, [...HOSTILE_COLORS.hunter]);
+    for (const e of this.enemies) if (e.kind === 'hunter') this.fx.burst(e.x, e.y - STACK.mid, [...HOSTILE_COLORS.hunter]);
     this.clearHostiles();
 
     if (this.lives <= 0) {
@@ -558,13 +576,13 @@ export class RoomScreen implements Screen {
   // ---- Treasure, the wreck marker and banking ----
 
   private placeTreasure(loot: Loot) {
-    const view = new Container();
+    const view = new Stack(loot.kind, STACK.shadow.loot);
     view.position.set(loot.x, loot.y);
-    const s = view.addChild(new Sprite(tex[loot.kind]));
-    s.anchor.set(0.5);
-    addTreasureGlow(this.clock, view);
-    this.treasureLayer.addChild(view);
-    this.clock.tween(view, { y: loot.y - 1 }, { ms: 600 + Math.random() * 300, yoyo: true, repeat: -1, ease: EASE.sineInOut });
+    addTreasureGlow(this.clock, view, -STACK.mid);
+    this.actors.addChild(view);
+    // Loot floats a little and bobs.
+    view.lift = 2;
+    this.clock.tween(view, { lift: 4 }, { ms: 600 + Math.random() * 300, yoyo: true, repeat: -1, ease: EASE.sineInOut });
     this.treasures.push({ loot, x: loot.x, y: loot.y, r: 5, view });
   }
 
@@ -575,7 +593,7 @@ export class RoomScreen implements Screen {
     this.treasures.splice(this.treasures.indexOf(t), 1);
     this.cargo.push(loot.kind);
     this.floatText(t.x, t.y - 8, `+${TREASURE[loot.kind].name.toUpperCase()}`, TEXT.amber);
-    this.fx.pop(t.x, t.y, [COLORS.loot, COLORS.amber], 24);
+    this.fx.pop(t.x, t.y - STACK.mid, [COLORS.loot, COLORS.amber], 24);
     playSound('pickup', { detune: Object.keys(TREASURE).indexOf(loot.kind) * 200 });
     t.view.destroy({ children: true, context: true });
     // 5200 rules: picking up any treasure clears the wreck X.
@@ -621,7 +639,7 @@ export class RoomScreen implements Screen {
     this.beamHum(false);
     this.clearHostiles();
     playSound('bank');
-    this.fx.pop(this.player.x, this.player.y, [COLORS.loot, COLORS.beam, COLORS.amber], 90);
+    this.fx.pop(this.player.x, this.player.y - STACK.mid, [COLORS.loot, COLORS.beam, COLORS.amber], 90);
 
     const cargoValue = this.cargo.reduce((sum, k) => sum + TREASURE[k].value, 0);
     const visited = this.vault.rooms.filter((r) => r.visited).length;
@@ -645,11 +663,8 @@ export class RoomScreen implements Screen {
 
   addEnemy(kind: EnemyKind, x: number, y: number): Enemy {
     const big = kind === 'warden' || kind === 'brood';
-    const view = new Sprite(tex[kind]);
-    view.anchor.set(0.5);
+    const view = this.actors.addChild(new Stack(kind, STACK.shadow[kind]));
     view.position.set(x, y);
-    view.zIndex = Z.enemy;
-    this.world.addChild(view);
     const e: Enemy = { kind, x, y, vx: 0, vy: 0, r: big ? 7 : 6, view, hp: ENEMY_HP[kind], armedAt: this.clock.now + HUNTER.armMs };
     this.enemies.push(e);
     return e;
@@ -659,7 +674,7 @@ export class RoomScreen implements Screen {
     const i = this.enemies.indexOf(e);
     if (i >= 0) this.enemies.splice(i, 1);
     if (this.flashed === e) this.flashed = undefined;
-    e.view.destroy();
+    e.view.destroy({ children: true });
   }
 
   /** Places the room's sentries, mines, wardens and brood pods at their starting spots. */
@@ -695,7 +710,7 @@ export class RoomScreen implements Screen {
     const h = this.addEnemy('hunter', at.x, at.y);
     h.view.alpha = 0;
     this.clock.tween(h.view, { alpha: 1 }, { ms: HUNTER.armMs });
-    this.fx.implode(at.x, at.y, HOSTILE_COLORS.hunter[0]);
+    this.fx.implode(at.x, at.y - STACK.mid, HOSTILE_COLORS.hunter[0]);
     this.nextSpawnAt = this.clock.now + HUNTER.spawnEveryMs;
   }
 
@@ -774,8 +789,9 @@ export class RoomScreen implements Screen {
   private fireBolt(sentry: Enemy) {
     const view = new Sprite(boltTexture());
     view.anchor.set(0.5);
-    view.zIndex = Z.bolt;
-    this.world.addChild(view);
+    // Flies at beam height.
+    view.pivot.y = STACK.beamZ;
+    this.actors.addChild(view);
     const a = Math.atan2(this.player.y - sentry.y, this.player.x - sentry.x);
     this.bolts.push({ x: sentry.x, y: sentry.y, vx: Math.cos(a) * SENTRY.boltSpeed, vy: Math.sin(a) * SENTRY.boltSpeed, r: 2, view });
     playSound('bolt');
@@ -805,8 +821,8 @@ export class RoomScreen implements Screen {
     d.brood = true;
     d.view.alpha = 0;
     this.clock.tween(d.view, { alpha: 1 }, { ms: HUNTER.armMs });
-    this.fx.implode(d.x, d.y, HOSTILE_COLORS.brood[0]);
-    this.fx.pop(brood.x, brood.y, [...HOSTILE_COLORS.brood], 10);
+    this.fx.implode(d.x, d.y - STACK.mid, HOSTILE_COLORS.brood[0]);
+    this.fx.pop(brood.x, brood.y - STACK.mid, [...HOSTILE_COLORS.brood], 10);
     playSound('hatch');
   }
 
@@ -821,7 +837,7 @@ export class RoomScreen implements Screen {
 
   private kill(e: Enemy) {
     const kind = e.kind as EnemyKind;
-    this.fx.burst(e.x, e.y, [...HOSTILE_COLORS[kind]], kind === 'brood' || kind === 'warden' ? 'big' : 'small');
+    this.fx.burst(e.x, e.y - STACK.mid, [...HOSTILE_COLORS[kind]], kind === 'brood' || kind === 'warden' ? 'big' : 'small');
     playSound(kind === 'brood' || kind === 'warden' ? 'boomBig' : 'boom');
     this.floatText(e.x, e.y - 8, `${ENEMY_POINTS[kind]}`, TEXT.ink);
     this.removeEnemy(e);
@@ -863,11 +879,8 @@ export class RoomScreen implements Screen {
     if (this.scavenger) return;
     const p = this.player;
     const at = doorTiles(this.room).reduce((far, d) => (dist(d.x, d.y, p.x, p.y) > dist(far.x, far.y, p.x, p.y) ? d : far));
-    const view = new Sprite(tex.scavenger);
-    view.anchor.set(0.5);
+    const view = this.actors.addChild(new Stack('scavenger', STACK.shadow.scavenger));
     view.alpha = 0.7;
-    view.zIndex = Z.enemy;
-    this.world.addChild(view);
     this.scavenger = {
       kind: 'scavenger', x: at.x, y: at.y, vx: 0, vy: 0, r: 6, view, hp: 0, shoo: SCAVENGER.shooHp, armedAt: this.clock.now + HUNTER.armMs, fleeing: false,
     };
@@ -911,7 +924,7 @@ export class RoomScreen implements Screen {
     playSound('shoo');
     this.addScore(SCAVENGER.points);
     this.floatText(s.x, s.y - 8, `${SCAVENGER.points}`, TEXT.ink);
-    this.fx.pop(s.x, s.y, [...HOSTILE_COLORS.scavenger], 24);
+    this.fx.pop(s.x, s.y - STACK.mid, [...HOSTILE_COLORS.scavenger], 24);
     if (s.stolen) {
       this.dropLoot(s.stolen, s.x, s.y);
       s.stolen = undefined;
@@ -922,7 +935,7 @@ export class RoomScreen implements Screen {
 
   private scavengerEscapes(s: Enemy) {
     const stolen = s.stolen;
-    s.view.destroy();
+    s.view.destroy({ children: true });
     this.scavenger = undefined;
     if (!stolen) return;
     const rooms = this.vault.rooms.filter((r) => r !== this.room && r !== this.vault.exit);
@@ -945,9 +958,9 @@ export class RoomScreen implements Screen {
 
   /** A hostile under the beam flickers white. The scavenger keeps its own tint (it shows stolen loot). */
   private flash(target: Enemy | undefined) {
-    if (this.flashed !== target && this.flashed && !this.flashed.view.destroyed) this.flashed.view.texture = tex[this.flashed.kind];
+    if (this.flashed !== target && this.flashed && !this.flashed.view.destroyed) this.flashed.view.white = false;
     this.flashed = target;
-    if (target) target.view.texture = tex[Math.floor(this.clock.now / 60) % 2 ? `${target.kind}-white` : target.kind];
+    if (target) target.view.white = Math.floor(this.clock.now / 60) % 2 === 1;
   }
 
   private updateBeam(firing: boolean, rawAim: number, dt: number) {
@@ -977,18 +990,20 @@ export class RoomScreen implements Screen {
         }
       }
       const ex = sx + dx * length, ey = sy + dy * length;
-      g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 4, color: COLORS.beam, alpha: 0.28 });
-      g.moveTo(sx, sy).lineTo(ex, ey).stroke({ width: 1, color: COLORS.beamCore, alpha: 1 });
-      g.rect(Math.round(ex) - 2, Math.round(ey) - 2, 4, 4).fill(target ? COLORS.beamCore : COLORS.beam);
+      // Collisions are worked out on the floor; the beam is drawn at hull height.
+      const h = STACK.beamZ;
+      g.moveTo(sx, sy - h).lineTo(ex, ey - h).stroke({ width: 4, color: COLORS.beam, alpha: 0.28 });
+      g.moveTo(sx, sy - h).lineTo(ex, ey - h).stroke({ width: 1, color: COLORS.beamCore, alpha: 1 });
+      g.rect(Math.round(ex) - 2, Math.round(ey - h) - 2, 4, 4).fill(target ? COLORS.beamCore : COLORS.beam);
       const kind = target?.kind;
-      this.fx.hit(ex, ey, aim, kind ? HOSTILE_COLORS[kind][0] : COLORS.beam);
+      this.fx.hit(ex, ey - h, aim, kind ? HOSTILE_COLORS[kind][0] : COLORS.beam);
       this.flash(kind && kind !== 'scavenger' ? target : undefined);
       if (target) this.hurt(target, BEAM.damagePerSecond * dt);
       this.beamHum(true, Boolean(target));
     } else {
       this.flash(undefined);
     }
-    g.rect(Math.round(sx) - 1, Math.round(sy) - 1, 2, 2).fill(firing ? COLORS.beamCore : COLORS.beam);
+    g.rect(Math.round(sx) - 1, Math.round(sy - STACK.beamZ) - 1, 2, 2).fill(firing ? COLORS.beamCore : COLORS.beam);
   }
 
   // ---- Effects ----
