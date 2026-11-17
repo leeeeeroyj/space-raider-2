@@ -129,9 +129,9 @@ export class Hud {
     add(this.currentCell);
     clock.tween(this.currentCell, { alpha: 0.2 }, { ms: 400, yoyo: true, repeat: -1 });
     LEGEND.forEach(([cell, s], i) => {
-      const x = PANEL.x + (i % 2) * 86, y = MAP_BOTTOM + 10 + Math.floor(i / 2) * 18;
+      const x = PANEL.x + (i % 2) * 82, y = MAP_BOTTOM + 10 + Math.floor(i / 2) * 18;
       g.rect(x, y + 2, 10, 10).fill(CELL_COLOR[cell]);
-      text(x + 16, y, s);
+      text(x + 14, y, s);
     });
 
     // Cargo tally: one row per tier, so any amount of loot fits in the same space.
