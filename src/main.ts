@@ -2,9 +2,11 @@ import { ATTRACT, attractSeed } from './attract';
 import { game, nav } from './engine/screens';
 import { loadSprites } from './engine/textures';
 import { bakeStacks } from './render/stack';
+import { getBus } from './audio/bus';
+import { musicState } from './audio/music';
 import { RoomScreen } from './screens/room';
 import { TitleScreen } from './screens/title';
-import { soundsPlayed } from './sfx';
+import { soundLabel, soundsPlayed } from './sfx';
 
 async function start() {
   // Text is rasterised when it's made, so the pixel font must be ready first.
@@ -22,6 +24,9 @@ async function start() {
     Object.assign(window, {
       __spaceRaider: {
         game,
+        musicState,
+        audioBus: getBus,
+        soundLabel,
         get screen() {
           return game.screen;
         },

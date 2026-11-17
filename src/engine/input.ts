@@ -1,3 +1,4 @@
+import { AIM_MODE_SELECTABLE } from '../config';
 import { touchSticks } from '../touch';
 import { game } from './screens';
 
@@ -17,6 +18,8 @@ export interface ControlState {
   confirm: boolean;
   back: boolean;
   mute: boolean;
+  /** N on the keyboard, Back on a controller (unless Back picks the aim mode). */
+  music: boolean;
   /** P on the keyboard, Start on a controller. */
   pause: boolean;
   device: Device;
@@ -31,6 +34,7 @@ export interface MenuState {
   back: boolean;
   toggleAim: boolean;
   mute: boolean;
+  music: boolean;
   device: Device;
 }
 
@@ -45,7 +49,7 @@ const TOUCH_AIM_THRESHOLD = 0.3;
 const BTN = { A: 0, B: 1, Y: 3, RB: 5, RT: 7, BACK: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 } as const;
 const TRACKED = [BTN.A, BTN.B, BTN.Y, BTN.BACK, BTN.START, BTN.UP, BTN.DOWN, BTN.LEFT, BTN.RIGHT];
 /** Keys the game uses: the browser mustn't scroll or do anything else with them. */
-const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyM', 'KeyP', 'Enter', 'Space', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const GAME_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyM', 'KeyN', 'KeyP', 'Enter', 'Space', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 const length = (v: Vec) => Math.hypot(v.x, v.y);
 const normalize = (v: Vec) => {
@@ -138,6 +142,7 @@ class Input {
     let confirm = this.just('Enter') || this.just('Space');
     let back = this.just('Escape');
     let mute = this.just('KeyM');
+    let music = this.just('KeyN');
     let pause = this.just('KeyP');
     this.fresh.clear();
 
@@ -168,7 +173,10 @@ class Input {
         fire = true;
         this.device = 'pad';
       }
-      if (edges.has(BTN.BACK)) toggleAim = true;
+      if (edges.has(BTN.BACK)) {
+        if (AIM_MODE_SELECTABLE) toggleAim = true;
+        else music = true;
+      }
       if (edges.has(BTN.START) || edges.has(BTN.A)) confirm = true;
       if (edges.has(BTN.B)) back = true;
       if (edges.has(BTN.Y)) mute = true;
@@ -193,7 +201,7 @@ class Input {
       this.device === 'pad' ? this.padAim
       : this.device === 'touch' ? this.touchAim
       : Math.atan2(this.mouse.y - from.y, this.mouse.x - from.x);
-    return { move, aim, fire, toggleAim, confirm, back, mute, pause, device: this.device };
+    return { move, aim, fire, toggleAim, confirm, back, mute, music, pause, device: this.device };
   }
 
   readMenu(): MenuState {
@@ -206,6 +214,7 @@ class Input {
       back: this.just('Escape'),
       toggleAim: this.just('KeyQ'),
       mute: this.just('KeyM'),
+      music: this.just('KeyN'),
       device: this.device,
     };
     this.fresh.clear();
@@ -223,7 +232,8 @@ class Input {
       s.right ||= edges.has(BTN.RIGHT) || crossed(x, this.prevStick.x, 1);
       s.confirm ||= edges.has(BTN.A) || edges.has(BTN.START);
       s.back ||= edges.has(BTN.B);
-      s.toggleAim ||= edges.has(BTN.BACK);
+      if (AIM_MODE_SELECTABLE) s.toggleAim ||= edges.has(BTN.BACK);
+      else s.music ||= edges.has(BTN.BACK);
       s.mute ||= edges.has(BTN.Y);
       if (Math.abs(x) > MENU_STICK || Math.abs(y) > MENU_STICK) this.device = 'pad';
       this.prevStick = { x, y };

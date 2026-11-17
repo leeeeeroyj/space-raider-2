@@ -17,7 +17,7 @@ export class Pilot {
 
   steer(r: RoomScreen, dt: number): ControlState {
     const p = r.player, move: Vec = { x: 0, y: 0 };
-    const out: ControlState = { move, aim: this.aim, fire: false, toggleAim: false, confirm: false, back: false, mute: false, pause: false, device: 'kbm' };
+    const out: ControlState = { move, aim: this.aim, fire: false, toggleAim: false, confirm: false, back: false, mute: false, music: false, pause: false, device: 'kbm' };
     if (r.dead || r.over || r.banking) return out;
     const foes = [...r.enemies, ...(r.scavenger && !r.scavenger.fleeing ? [r.scavenger] : [])];
     let nearest: { x: number; y: number } | undefined, nd = Infinity;

@@ -7,7 +7,8 @@ import { label, setText, zone } from '../engine/text';
 import { addTreasureGlow, startSparkles } from '../fx';
 import { loadHi } from '../hi';
 import { Stack } from '../render/stack';
-import { initAudio, playSound, toggleMute } from '../sfx';
+import { playMusic } from '../audio/music';
+import { initAudio, playSound, soundLabel, toggleMusic, toggleMute } from '../sfx';
 
 type Star = { x: number; y: number; speed: number; alpha: number };
 const MENU: ReadonlyArray<'start' | 'aim'> = AIM_MODE_SELECTABLE ? ['start', 'aim'] : ['start'];
@@ -25,6 +26,7 @@ export class TitleScreen implements Screen {
   private selected = 0;
   private menu: Text[] = [];
   private padStatus: Text | undefined;
+  private readonly soundText: Text;
   /** The high score line, if there is one (the tests read it). */
   hiText: Text | undefined;
   private leaving = false;
@@ -33,6 +35,7 @@ export class TitleScreen implements Screen {
 
   constructor() {
     initAudio();
+    playMusic('title');
     // Start listening now, so the first key press counts.
     input();
     this.root.addChild(this.stage);
@@ -59,6 +62,7 @@ export class TitleScreen implements Screen {
     text(cx, 48, 'BLAST THE HOSTILES. GRAB WHAT GLOWS. GET OUT ALIVE.', 8, TEXT.ink);
     const hi = loadHi();
     if (hi) this.hiText = text(WIDTH - 40, 2, `HI ${hi.toLocaleString('en-US')}`, 8, TEXT.amber);
+    this.soundText = text(40, 2, '', 8, TEXT.dim);
 
     // Legend: what you fly, what to collect, what to shoot.
     text(64, 64, 'YOU', 8, TEXT.dim);
@@ -97,10 +101,10 @@ export class TitleScreen implements Screen {
     const aimLine = (key: string) => (AIM_MODE_SELECTABLE ? `\n${key}` : '');
     const aimAction = AIM_MODE_SELECTABLE ? '\nAIM MODE' : '';
     if (touchScreen) {
-      column(cx, 'TOUCH', 'LEFT CIRCLE\nRIGHT CIRCLE\nTAP II\nTAP', 'MOVE\nAIM + FIRE\nPAUSE, TOP LEFT\nSOUND, TOP RIGHT');
+      column(cx, 'TOUCH', 'LEFT CIRCLE\nRIGHT CIRCLE\nTAP II\nTAP', 'MOVE\nAIM + FIRE\nPAUSE, TOP LEFT\nSOUND / MUSIC, TOP RIGHT');
     } else {
-      column(112, 'KEYBOARD + MOUSE', `WASD\nMOUSE\nHOLD CLICK${aimLine('Q')}\nP  ·  M`, `MOVE\nAIM\nFIRE${aimAction}\nPAUSE  ·  SOUND`);
-      column(304, 'CONTROLLER', `L-STICK\nR-STICK\nRT${aimLine('BACK')}\nSTART  ·  Y`, `MOVE\nAIM + FIRE\nFIRE${aimAction}\nPAUSE  ·  SOUND`);
+      column(112, 'KEYBOARD + MOUSE', `WASD\nMOUSE\nCLICK  ·  P${aimLine('Q')}\nM  ·  N`, `MOVE\nAIM\nFIRE  ·  PAUSE${aimAction}\nSOUND  ·  MUSIC`);
+      column(304, 'CONTROLLER', `L-STICK\nR-STICK\nRT  ·  START${aimLine('BACK')}\n${AIM_MODE_SELECTABLE ? 'Y' : 'Y  ·  BACK'}`, `MOVE\nAIM + FIRE\nFIRE  ·  PAUSE${aimAction}\n${AIM_MODE_SELECTABLE ? 'SOUND' : 'SOUND  ·  MUSIC'}`);
       this.padStatus = text(cx, 218, '', 8, TEXT.dim);
     }
 
@@ -115,6 +119,8 @@ export class TitleScreen implements Screen {
     this.turning.forEach((s, i) => (s.spin = secs * 0.15 * Math.PI * 2 + i * 0.7));
     const m = input().readMenu();
     if (m.mute) toggleMute();
+    if (m.music) toggleMusic();
+    setText(this.soundText, soundLabel());
     if (!this.leaving) {
       if ((m.up || m.down) && MENU.length > 1) {
         this.selected = (this.selected + (m.down ? 1 : MENU.length - 1)) % MENU.length;

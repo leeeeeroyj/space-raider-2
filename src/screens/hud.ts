@@ -5,7 +5,7 @@ import type { Device } from '../engine/input';
 import { label, setText as set, zone } from '../engine/text';
 import { tex } from '../engine/textures';
 import { itemIcon } from '../render/icons';
-import { isMuted, toggleMute } from '../sfx';
+import { cycleSound, isMuted, soundLabel } from '../sfx';
 import { GRID, type MapCell } from '../vault';
 
 export interface HudState {
@@ -57,9 +57,9 @@ const GEAR: ItemKind[] = ['overcharge', 'splitter', 'lance', 'ricochet', 'shield
 const PAUSE = { x: 178, y: 11 };
 const PAUSE_HINTS: Record<Device, string> = { kbm: 'P OR ENTER RESUME  ·  ESC TITLE', pad: 'START OR A RESUME  ·  B TITLE', touch: 'TAP RESUME' };
 const HINTS: Record<Device, string> = {
-  pad: 'L-STICK MOVE  ·  R-STICK AIM + FIRE  ·  START PAUSE  ·  Y SOUND',
+  pad: 'R-STICK AIM + FIRE  ·  START PAUSE  ·  Y SOUND  ·  BACK MUSIC',
   touch: 'LEFT CIRCLE MOVE  ·  RIGHT CIRCLE AIM + FIRE',
-  kbm: 'WASD MOVE  ·  MOUSE AIM  ·  CLICK FIRE  ·  P PAUSE  ·  M SOUND',
+  kbm: 'WASD MOVE  ·  CLICK FIRE  ·  P PAUSE  ·  M SOUND  ·  N MUSIC',
 };
 /** Reserve ships shown as icons before the top bar switches to "icon x N". */
 const MAX_SHIP_ICONS = 5;
@@ -119,7 +119,7 @@ export class Hud {
     this.cargoValue = text(612, 10, '', TEXT.amber);
     // Tap or click to toggle: phones have no M key. The hit area is padded so it's easy to hit with a thumb.
     this.soundToggle = text(W - 8, 10, 'SOUND OFF', TEXT.dim, 1, 0);
-    this.soundZone = add(zone(W - 140, 0, 140, 36, () => toggleMute()));
+    this.soundZone = add(zone(W - 140, 0, 140, 36, () => cycleSound()));
 
     text(740, BAR + 12, 'VAULT MAP', TEXT.dim, 0.5, 0);
     add(this.mapCells);
@@ -189,8 +189,7 @@ export class Hud {
     set(this.level, String(s.level).padStart(2, '0'));
     set(this.hostiles, s.hostiles ? `HOSTILES ${s.hostiles}` : 'ROOM SECURE', s.hostiles ? TEXT.danger : TEXT.dim);
     set(this.hint, s.attract || s.paused ? '' : HINTS[s.device]);
-    const muted = isMuted();
-    set(this.soundToggle, muted ? 'SOUND OFF' : 'SOUND ON', muted ? TEXT.danger : TEXT.dim);
+    set(this.soundToggle, soundLabel(), isMuted() ? TEXT.danger : TEXT.dim);
     this.soundToggle.visible = !s.attract;
     this.soundZone.eventMode = s.attract ? 'none' : 'static';
     const pauseTap = s.device === 'touch' && !s.attract && !s.over && !s.paused;

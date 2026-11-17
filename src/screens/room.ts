@@ -18,7 +18,8 @@ import { Pilot } from '../room/pilot';
 import { Stack } from '../render/stack';
 import { itemColor, itemIcon } from '../render/icons';
 import { buildWalls, drawWallShade } from '../render/walls';
-import { loopSound, playSound, toggleMute, type Loop } from '../sfx';
+import { duckMusic, pauseMusic, playMusic, setMood, stopMusic } from '../audio/music';
+import { loopSound, playSound, toggleMusic, toggleMute, type Loop } from '../sfx';
 import { touchSticks } from '../touch';
 import {
   GRID, OPPOSITE, generateVault, hostileCount, mapCell, neighbor, roomIndex,
@@ -234,6 +235,7 @@ export class RoomScreen implements Screen {
       this.beamHum(false);
     }
     touchSticks.show(!on);
+    pauseMusic(on);
     playSound('chime');
   }
 
@@ -251,6 +253,8 @@ export class RoomScreen implements Screen {
     }
     if (AIM_MODE_SELECTABLE && controls.toggleAim) aimMode.snap8 = this.snap8 = !this.snap8;
     if (controls.mute) toggleMute();
+    if (controls.music) toggleMusic();
+    if (!demo) setMood({ combat: hostileCount(this.room) > 0 && !this.dead && !this.banking, heavy: this.cargo.length >= this.slots * 0.75 });
     if (this.paused) {
       if (controls.back) this.toTitle();
       else if (controls.pause || controls.confirm) this.setPaused(false);
@@ -421,6 +425,7 @@ export class RoomScreen implements Screen {
 
   private startVault(level: number) {
     this.vault = generateVault(level, `${this.runSeed}-${level}`);
+    if (this.demoSeed < 0) playMusic('game', level);
     this.enterRoom(this.vault.entrance);
     this.showBanner(`VAULT ${level}`, 'FIND THE EXIT. GRAB WHAT GLOWS.', 2000);
   }
@@ -597,6 +602,7 @@ export class RoomScreen implements Screen {
         this.overAt = this.clock.now;
         if (this.demoSeed >= 0) return;
         this.newHi = saveHi(this.score);
+        stopMusic();
         playSound('gameOver');
         const best = this.newHi ? 'NEW HIGH SCORE!' : `HI ${pts(Math.max(this.hi, this.score))}`;
         if (this.device === 'touch') {
@@ -625,6 +631,7 @@ export class RoomScreen implements Screen {
     if (earned > 0) {
       this.lives += earned;
       playSound('extraShip');
+      duckMusic(1200);
       this.floatText(this.player.x, this.player.y - 14, 'EXTRA SHIP', TEXT.beam);
     }
   }
@@ -765,6 +772,7 @@ export class RoomScreen implements Screen {
     this.beamHum(false);
     this.clearHostiles();
     playSound('bank');
+    duckMusic(2800);
     this.fx.pop(this.player.x, this.player.y - STACK.mid, [COLORS.loot, COLORS.beam, COLORS.amber], 90);
 
     const cargoValue = this.cargo.reduce((sum, k) => sum + TREASURE[k].value, 0);

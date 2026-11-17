@@ -10,7 +10,7 @@ const KEYS = {
   ArrowRight: [39, 'ArrowRight'], ArrowLeft: [37, 'ArrowLeft'], ArrowUp: [38, 'ArrowUp'], ArrowDown: [40, 'ArrowDown'],
   Enter: [13, 'Enter'], Escape: [27, 'Escape'], ' ': [32, 'Space'], m: [77, 'KeyM'],
   w: [87, 'KeyW'], a: [65, 'KeyA'], s: [83, 'KeyS'], d: [68, 'KeyD'],
-  z: [90, 'KeyZ'], x: [88, 'KeyX'], Shift: [16, 'ShiftLeft'], p: [80, 'KeyP'],
+  z: [90, 'KeyZ'], x: [88, 'KeyX'], Shift: [16, 'ShiftLeft'], p: [80, 'KeyP'], n: [78, 'KeyN'],
 };
 
 export async function until(fn, ms = 15000, step = 100) {
