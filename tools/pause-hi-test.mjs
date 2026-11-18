@@ -1,6 +1,6 @@
 // Pause and high score: P, Esc and the page going to the background pause the raid; P or Enter resumes; Esc from the
 // pause menu goes to the title. A sentry's next shot waits out the pause. A run's score becomes the high score
-// (space-raider-hi), shown on the title and the game-over banner, and a lower score doesn't replace it.
+// (space-raider-2-hi), shown on the title and the game-over banner, and a lower score doesn't replace it.
 // Usage: node tools/pause-hi-test.mjs <project-dir> <out-dir>
 import { session } from './cdp.mjs';
 
@@ -69,14 +69,14 @@ const over = async (score) => {
 };
 await over(1234);
 await shot('2-new-high');
-check('game over saves the high score', (await evaluate(`localStorage.getItem('space-raider-hi')`)) === '1234');
+check('game over saves the high score', (await evaluate(`localStorage.getItem('space-raider-2-hi')`)) === '1234');
 check('the banner says NEW HIGH SCORE!', await evaluate(`${S}.subBanner.text.includes('NEW HIGH SCORE!')`));
 await until(() => evaluate(`${S}.clock.now - ${S}.overAt > 900`), 8000);
 await tap('Enter');
 await until(() => evaluate(`${on('room')} && !${S}.over`), 8000);
 await sleep(500);
 await over(500);
-check('a lower score leaves it alone', (await evaluate(`localStorage.getItem('space-raider-hi')`)) === '1234');
+check('a lower score leaves it alone', (await evaluate(`localStorage.getItem('space-raider-2-hi')`)) === '1234');
 { const sub = await evaluate(`${S}.subBanner.text`); check('and the banner shows the high score', sub.includes('HI 1,234'), sub.replace(/\n/g, ' / ')); }
 await until(() => evaluate(`${S}.clock.now - ${S}.overAt > 900`), 8000);
 await tap('Escape');

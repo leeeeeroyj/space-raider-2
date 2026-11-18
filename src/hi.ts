@@ -1,8 +1,8 @@
-// The high score: one number in localStorage under `space-raider-hi`, which Arcadia's cabinet shows too. Storage can be
+// The high score: one number in localStorage under `space-raider-2-hi`, which Arcadia's cabinet shows too. Storage can be
 // blocked (private windows, embeds), so every access is in try/catch and the game carries on without it.
 import { ATTRACT } from './attract';
 
-const KEY = 'space-raider-hi';
+const KEY = 'space-raider-2-hi';
 
 export function loadHi(): number {
   try {
