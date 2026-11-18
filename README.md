@@ -1,6 +1,6 @@
 <div align="center">
 
-# Space Raider 2
+# Space Raider II
 
 **Blast the hostiles. Grab what glows. Get out alive.**
 
@@ -17,7 +17,7 @@ stacked-sprite 3D look, items that upgrade your beam and your hold, and music co
 ![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![Space Raider 2: an overcharged, split beam hits two hunter saucers while an item crate glows by the wall and gold loot turns on the floor](docs/screenshot.png)
+![Space Raider II: an overcharged, split beam hits two hunter saucers while an item crate glows by the wall and gold loot turns on the floor](docs/screenshot.png)
 
 </div>
 
