@@ -69,7 +69,12 @@ export type StackMode =
   /** Drawn from the front and round: each row is spun round the middle into a ring. */
   | { kind: 'lathe' }
   /** Drawn from the front: each row becomes a strip `depth` pixels deep, so the sprite is a thick cut-out. */
-  | { kind: 'card'; depth: number };
+  | { kind: 'card'; depth: number }
+  /**
+   * Drawn from the front and rounded: each pixel is as deep as a ball would be that far in from the sprite's edge,
+   * up to `radius` each way, so blobs become balls and points stay thin. The front keeps the sprite's own pixels.
+   */
+  | { kind: 'puff'; radius: number };
 
 /**
  * The 3D look. Every object is a stack of horizontal slices drawn one above the other, `step` design pixels apart, so
@@ -98,12 +103,12 @@ export const STACK = {
     mine: { kind: 'lathe' },
     brood: { kind: 'lathe' },
     warden: { kind: 'card', depth: 3 },
-    scavenger: { kind: 'card', depth: 3 },
+    scavenger: { kind: 'puff', radius: 6 },
     t1_coin: { kind: 'card', depth: 2 },
     t2_chip: { kind: 'flat', layers: 2 },
-    t3_star: { kind: 'card', depth: 3 },
-    t4_crystal: { kind: 'card', depth: 4 },
-    t5_idol: { kind: 'card', depth: 4 },
+    t3_star: { kind: 'puff', radius: 3 },
+    t4_crystal: { kind: 'puff', radius: 3 },
+    t5_idol: { kind: 'puff', radius: 5 },
     exit: { kind: 'flat', layers: 2 },
   } satisfies Record<string, StackMode>,
   /** Shadow radius under each kind, in design pixels. */

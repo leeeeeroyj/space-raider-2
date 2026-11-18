@@ -58,7 +58,7 @@ export class TitleScreen implements Screen {
     };
 
     text(cx, 10, 'A VAULT RAID IN 36 ROOMS', 8, TEXT.dim);
-    text(cx, 20, 'SPACE RAIDER', 24, TEXT.amber);
+    text(cx, 20, 'SPACE RAIDER II', 24, TEXT.amber);
     text(cx, 48, 'BLAST THE HOSTILES. GRAB WHAT GLOWS. GET OUT ALIVE.', 8, TEXT.ink);
     const hi = loadHi();
     if (hi) this.hiText = text(WIDTH - 40, 2, `HI ${hi.toLocaleString('en-US')}`, 8, TEXT.amber);
@@ -68,7 +68,7 @@ export class TitleScreen implements Screen {
     text(64, 64, 'YOU', 8, TEXT.dim);
     // The ship never turns.
     this.stage.addChild(model('player', 64, 86, false));
-    text(196, 64, 'LOOT  500 TO 8,000', 8, TEXT.dim);
+    text(196, 64, 'LOOT  1,500 TO 24,000', 8, TEXT.dim);
     const loot = LOOT.map((key, i) => {
       const c = new Container();
       c.position.set(156 + i * 20, 86);

@@ -114,6 +114,73 @@ function ring(src: ImageData, r: number) {
   return { img, white };
 }
 
+const lumAt = (d: ImageData, r: number, c: number) => {
+  const i = (r * SIZE + c) * 4;
+  return 0.3 * d.data[i] + 0.59 * d.data[i + 1] + 0.11 * d.data[i + 2];
+};
+
+/** How deep a puffed model's face is, so it fully covers the step between rows once squashed. */
+const FACE_DEPTH = Math.ceil(STACK.step / STACK.squash) + 1;
+
+/** For each pixel of the sprite, how far it is from the nearest empty pixel (or the sprite's border); 0 if empty. */
+function insetMap(src: ImageData) {
+  const empty: Array<[number, number]> = [];
+  for (let r = -1; r <= SIZE; r++) {
+    for (let c = -1; c <= SIZE; c++) {
+      if (r < 0 || c < 0 || r >= SIZE || c >= SIZE || !alphaAt(src, r, c)) empty.push([r, c]);
+    }
+  }
+  return Array.from({ length: SIZE }, (_, r) =>
+    Array.from({ length: SIZE }, (_, c) => (alphaAt(src, r, c) ? Math.min(...empty.map(([er, ec]) => Math.hypot(er - r, ec - c))) : 0)),
+  );
+}
+
+/**
+ * Row `r` of a front-view sprite as a rounded cross-section: `radius * 2 + 1` deep, each column as thick as a ball of
+ * that inset would be. The front edge (toward the camera) is the sprite's own pixel; the rest takes the row's main
+ * colour, darker toward the back, and the section's rim is darkened so it reads from above.
+ */
+function puffSlice(src: ImageData, inset: number[][], r: number, radius: number) {
+  const h = radius * 2 + 1, d = src.data;
+  const half = (c: number) => {
+    const t = inset[r][c] - 0.5;
+    return t <= 0 ? -1 : Math.min(radius, Math.round(Math.sqrt(Math.max(0, t * (2 * radius - t)))));
+  };
+  const halves = Array.from({ length: SIZE }, (_, c) => (alphaAt(src, r, c) ? half(c) : -1));
+  if (halves.every((v) => v < 0)) return undefined;
+  // Behind the front, the row's most common non-outline colour, so details (an eye, a jewel) stay on the surface
+  // instead of running through the solid. A row that is all outline keeps its own pixels.
+  const counts = new Map<number, { c: number; n: number }>();
+  for (let c = 0; c < SIZE; c++) {
+    if (!alphaAt(src, r, c) || lumAt(src, r, c) < 48) continue;
+    const i = (r * SIZE + c) * 4, rgb = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    const e = counts.get(rgb) ?? { c, n: 0 };
+    e.n++;
+    counts.set(rgb, e);
+  }
+  const main = [...counts.values()].sort((a, b) => b.n - a.n)[0]?.c;
+  const body = (c: number) => main ?? c;
+  const filled = (x: number, y: number) => x >= 0 && x < SIZE && y >= 0 && y < h && halves[x] >= 0 && Math.abs(y - radius) <= halves[x];
+  const img = new ImageData(SIZE, h), white = new ImageData(SIZE, h);
+  for (let x = 0; x < SIZE; x++) {
+    if (halves[x] < 0) continue;
+    const front = radius + halves[x], from = body(x);
+    for (let y = radius - halves[x]; y <= front; y++) {
+      // The sprite's own colours go a few pixels in from the front: squashed, one pixel is less than the step between
+      // rows, and the inside would show through as stripes across the face.
+      const own = y > front - FACE_DEPTH;
+      const i = (r * SIZE + (own ? x : from)) * 4;
+      const depth = halves[x] ? (y - (radius - halves[x])) / (2 * halves[x]) : 1;
+      const rim = !filled(x - 1, y) || !filled(x + 1, y) || !filled(x, y - 1);
+      const shade = own ? 1 : (0.7 + 0.25 * depth) * (rim ? 0.7 : 1);
+      const o = (y * SIZE + x) * 4;
+      img.data.set([d[i] * shade, d[i + 1] * shade, d[i + 2] * shade, d[i + 3]], o);
+      white.data.set([255, 255, 255, d[i + 3]], o);
+    }
+  }
+  return { img, white };
+}
+
 /** Slices of one sprite, bottom to top, as images. */
 function cut(key: string, mode: StackMode) {
   const src = pixels(key);
@@ -137,8 +204,11 @@ function cut(key: string, mode: StackMode) {
     while (bottom > top && dark(bottom)) bottom--;
   }
   const images = [];
+  const inset = mode.kind === 'puff' ? insetMap(src) : [];
   for (let r = bottom; r >= top; r--) {
-    if (mode.kind === 'card') {
+    if (mode.kind === 'puff') {
+      images.push(puffSlice(src, inset, r, mode.radius));
+    } else if (mode.kind === 'card') {
       // A strip `depth` deep, every line a copy of the row: a thick cut-out.
       images.push(slice(src, SIZE, mode.depth, (x) => [r, x]));
     } else {
